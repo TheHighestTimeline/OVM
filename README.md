@@ -1,219 +1,111 @@
-/**
- * monthlyReporter.ts — Medium / High Tier
- * Generates monthly optimization reports for each qualifying client.
- */
+# OVM-website
 
-import { readSheetTab, appendToSheet } from './googleSheets';
-import OpenAI from 'openai';
-import { average, topN, generateId } from './utils';
+Marketing site for **OneVibeMedia** &mdash; premium media & marketing systems.
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+Single-page static site. No build step. Deploys to Netlify in one click.
 
-export interface ClientConfig {
-  businessId: string;
-  businessName: string;
-  ownerEmail: string;
-  googleSheetId: string;
-  tier: 'low' | 'medium' | 'high';
-  monthlyOptimizationReports: boolean;
-}
+---
 
-export interface MonthlyReport {
-  report_id: string;
-  month: string;                    // e.g. "2026-04"
-  business_id: string;
-  total_calls: number;
-  total_leads: number;
-  average_lead_score: number;
-  average_quality_score: number;
-  top_services_requested: string;
-  common_questions: string;
-  common_failure_points: string;
-  recommended_faq_updates: string;
-  recommended_script_updates: string;
-  recommended_calendly_updates: string;
-  notes: string;
-}
+## Deploy in 3 steps
 
-/**
- * Generate a full monthly optimization report for a client.
- * Uses GPT-4o-mini to produce actionable recommendations.
- */
-export async function generateMonthlyReport(client: ClientConfig): Promise<MonthlyReport> {
-  const month     = getPreviousMonth();
-  const calls     = await getMonthCalls(client.googleSheetId, month);
-  const qualScores = await getMonthQualityScores(client.googleSheetId);
-  const lostLeads = await getMonthLostLeads(client.googleSheetId);
+### 1. Create the GitHub repo
 
-  const totalCalls        = calls.length;
-  const totalLeads        = calls.filter(c => c[8] !== 'Spam / Vendor' && c[8] !== 'Wrong Number').length;
-  const avgLeadScore      = average(calls.map(c => parseInt(c[9] ?? '0', 10)));
-  const avgQualityScore   = average(qualScores.map(s => parseInt(s[16] ?? '0', 10)));
-  const topServices       = topN(calls.map(c => c[4]).filter(Boolean), 5);
-  const failurePoints     = analyzeFailurePoints(calls, lostLeads);
+Open a terminal in this folder (`OVM-website/`) and run:
 
-  // Use AI to generate optimization recommendations
-  const recommendations = await generateAIRecommendations({
-    totalCalls, totalLeads, avgLeadScore, avgQualityScore,
-    topServices, failurePoints, month, businessName: client.businessName,
-  });
+```bash
+# initialize the local repo
+git init
+git add .
+git commit -m "Initial commit"
+git branch -M main
 
-  return {
-    report_id:                    generateId('MR'),
-    month,
-    business_id:                  client.businessId,
-    total_calls:                  totalCalls,
-    total_leads:                  totalLeads,
-    average_lead_score:           Math.round(avgLeadScore * 10) / 10,
-    average_quality_score:        Math.round(avgQualityScore * 10) / 10,
-    top_services_requested:       topServices.join(', '),
-    common_questions:             recommendations.commonQuestions,
-    common_failure_points:        failurePoints.join('; '),
-    recommended_faq_updates:      recommendations.faqUpdates,
-    recommended_script_updates:   recommendations.scriptUpdates,
-    recommended_calendly_updates: recommendations.calendlyUpdates,
-    notes:                        recommendations.notes,
-  };
-}
+# create the remote repo and push (GitHub CLI)
+gh repo create OVM-website --public --source=. --remote=origin --push
+```
 
-/**
- * Write monthly report to the Monthly Optimization Reports tab.
- * Columns: report_id | month | business_id | total_calls | total_leads |
- *          average_lead_score | average_quality_score | top_services_requested |
- *          common_questions | common_failure_points | recommended_faq_updates |
- *          recommended_script_updates | recommended_calendly_updates | notes
- */
-export async function saveMonthlyReportToSheet(
-  sheetId: string,
-  report: MonthlyReport
-): Promise<void> {
-  const row = [
-    report.report_id,
-    report.month,
-    report.business_id,
-    report.total_calls,
-    report.total_leads,
-    report.average_lead_score,
-    report.average_quality_score,
-    report.top_services_requested,
-    report.common_questions,
-    report.common_failure_points,
-    report.recommended_faq_updates,
-    report.recommended_script_updates,
-    report.recommended_calendly_updates,
-    report.notes,
-  ];
+If you don't have GitHub CLI installed, create the repo manually at https://github.com/new (name it `OVM-website`, leave it empty &mdash; no README, no .gitignore), then:
 
-  await appendToSheet(sheetId, 'Monthly Optimization Reports', row);
-  console.log(`[monthlyReporter] Saved monthly report ${report.report_id} for ${report.month}`);
-}
+```bash
+git remote add origin https://github.com/<YOUR-USERNAME>/OVM-website.git
+git push -u origin main
+```
 
-// ── Internal helpers ──────────────────────────────────────────────────────────
+### 2. Connect to Netlify
 
-async function getMonthCalls(sheetId: string, month: string): Promise<string[][]> {
-  const rows = await readSheetTab(sheetId, 'Call Log');
-  return (rows ?? []).slice(1).filter(row => {
-    const d = new Date(row[3]);
-    if (isNaN(d.getTime())) return false;
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === month;
-  });
-}
+1. Go to https://app.netlify.com/start
+2. Click **"Import from Git"** &rarr; **GitHub** &rarr; select **OVM-website**
+3. Leave the build settings empty (no build command, publish directory: `/`)
+4. Click **"Deploy site"**
 
-async function getMonthQualityScores(sheetId: string): Promise<string[][]> {
-  try {
-    return ((await readSheetTab(sheetId, 'AI Quality Scores')) ?? []).slice(1);
-  } catch { return []; }
-}
+That's it. Netlify will give you a `*.netlify.app` URL. Connect your custom domain (`onevibemedia.shop`) under **Site settings &rarr; Domain management**.
 
-async function getMonthLostLeads(sheetId: string): Promise<string[][]> {
-  try {
-    return ((await readSheetTab(sheetId, 'Lost Lead Alerts')) ?? []).slice(1);
-  } catch { return []; }
-}
+### 3. (Optional) Local preview
 
-function analyzeFailurePoints(calls: string[][], lostLeads: string[][]): string[] {
-  const points: string[] = [];
+```bash
+# python 3
+python -m http.server 8000
 
-  const incompleteRate = calls.filter(c => c[8] === 'Incomplete Call').length / Math.max(calls.length, 1);
-  if (incompleteRate > 0.10) points.push(`High incomplete call rate (${(incompleteRate * 100).toFixed(0)}%)`);
+# or node
+npx serve .
+```
 
-  const lostRate = lostLeads.length / Math.max(calls.length, 1);
-  if (lostRate > 0.12) points.push(`Elevated lost lead rate (${(lostRate * 100).toFixed(0)}%)`);
+Open http://localhost:8000
 
-  const calendlyRate = calls.filter(c => c[12] === 'TRUE').length / Math.max(calls.length, 1);
-  if (calendlyRate < 0.20) points.push('Low Calendly offer/acceptance rate');
+---
 
-  return points.length > 0 ? points : ['No significant failure points detected'];
-}
+## Editing the 3 portfolio cards
 
-interface AIRecommendationInput {
-  totalCalls: number;
-  totalLeads: number;
-  avgLeadScore: number;
-  avgQualityScore: number;
-  topServices: string[];
-  failurePoints: string[];
-  month: string;
-  businessName: string;
-}
+The portfolio section currently shows DockBridge, InItPic, and Lily CRM. To swap one out, open `index.html` and find the `<!-- SITE 1 -->`, `<!-- SITE 2 -->`, or `<!-- SITE 3 -->` block, then update the `href`, `url` text, `src`, `h4`, and `p`:
 
-interface AIRecommendations {
-  commonQuestions: string;
-  faqUpdates: string;
-  scriptUpdates: string;
-  calendlyUpdates: string;
-  notes: string;
-}
+```html
+<a class="site-card reveal" href="https://YOUR-URL.com" target="_blank" rel="noopener">
+  <div class="site-frame">
+    <div class="site-chrome"><span></span><span></span><span></span><div class="url">YOUR-URL.com</div></div>
+    <img class="site-img" src="assets/your-site.jpg" alt="Project Name">
+  </div>
+  <div class="site-info">
+    <div class="site-info-tag">Web Platform</div>
+    <h4>Project Name</h4>
+    <p>One-line description of what we built.</p>
+    <span class="site-link">Visit Site <span>&rarr;</span></span>
+  </div>
+</a>
+```
 
-async function generateAIRecommendations(data: AIRecommendationInput): Promise<AIRecommendations> {
-  const prompt = `
-You are analyzing AI receptionist performance for ${data.businessName} for month ${data.month}.
+Drop the screenshot `.jpg` into `assets/` first, then reference it in the `<img>` tag.
 
-DATA:
-- Total calls: ${data.totalCalls}
-- Total leads: ${data.totalLeads}  
-- Avg lead score: ${data.avgLeadScore.toFixed(1)}/100
-- Avg quality score: ${data.avgQualityScore.toFixed(1)}/100
-- Top services: ${data.topServices.join(', ')}
-- Failure points: ${data.failurePoints.join('; ')}
+---
 
-Provide JSON with these fields:
-{
-  "commonQuestions": "Top 3 questions callers asked this month (inferred from service types)",
-  "faqUpdates": "Specific FAQ additions or updates recommended",
-  "scriptUpdates": "Specific AI script improvements recommended",
-  "calendlyUpdates": "Specific Calendly link or service-specific link recommendations",
-  "notes": "1-2 sentence executive summary"
-}
+## Structure
 
-Be specific and actionable. No generic advice.
-`;
+```
+OVM-website/
+├── index.html              # the whole site (single file)
+├── assets/
+│   ├── logo.png            # OneVibeMedia mark (white-on-dark)
+│   ├── onevibe-screen.jpg  # OneVibeMedia portfolio card image
+│   ├── gallery-product-*.jpg
+│   ├── product-video-*.mp4 # 3D visual gallery videos
+│   └── OVMG-Creative-Portfolio.pdf
+├── _headers                # Netlify cache headers
+├── netlify.toml            # Netlify build/deploy config
+├── .gitignore
+└── README.md
+```
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: 'You are a business optimization analyst. Return only valid JSON.' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.3,
-      response_format: { type: 'json_object' },
-    });
+---
 
-    return JSON.parse(response.choices[0]?.message?.content ?? '{}');
-  } catch {
-    return {
-      commonQuestions: 'Unable to generate — check API key',
-      faqUpdates: 'Review call transcripts manually',
-      scriptUpdates: 'Review quality scores for lowest-performing calls',
-      calendlyUpdates: 'Ensure service-specific links are configured',
-      notes: `Month ${data.month}: ${data.totalCalls} calls, ${data.totalLeads} leads, avg score ${data.avgLeadScore.toFixed(0)}.`,
-    };
-  }
-}
+## What's in this build (vs. the current onevibemedia.shop site)
 
-function getPreviousMonth(): string {
-  const d = new Date();
-  d.setMonth(d.getMonth() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
+- Same copy &mdash; verbatim
+- Hero: animated mesh-gradient orbs + grid overlay + noise texture
+- Trust strip with 4 stats below the hero CTAs
+- Polished tile spotlight (cursor-following accent glow on tile hover)
+- Browser-frame portfolio cards (replaces the old 6 generic cards with 3 live-site previews)
+- "Portfolio" nav link scrolls directly to the site cards
+- Removed Solar ESS / data center enterprise section &mdash; this site is the media production arm only
+- Marquee with gradient fade edges
+- Reveal-on-scroll animations everywhere
+- Tighter mobile menu, smoother transitions, accessible focus styles
+
+Copy, services, pricing, contact form fields, mission/vision/portfolio flip cards, video modal &mdash; all preserved.
