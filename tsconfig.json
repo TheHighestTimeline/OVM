@@ -1,0 +1,329 @@
+/**
+ * outboundWorker.ts — High Tier Only
+ * Outbound call worker — runs every 30 minutes via cron, or manually.
+ * Reads Outbound Queue, validates each lead, places Twilio calls.
+ */
+
+import twilio from 'twilio';
+import { readSheetTab, updateSheetRow, appendToSheet } from './googleSheets';
+import { getAllActiveClients, getClientConfig } from './clientManager';
+import { checkOutboundEligibility, OutboundQueueRow } from './outboundEligibility';
+import { logError, logEvent } from './logger';
+import { generateId } from './utils';
+import fs from 'fs';
+import path from 'path';
+
+export interface OutboundAttemptLog {
+  attempt_id: string;
+  lead_id: string;
+  business_id: string;
+  call_sid: string;
+  campaign_type: string;
+  lead_name: string;
+  lead_phone: string;
+  attempted_at: string;
+  status: string;
+  notes: string;
+}
+
+/**
+ * Main worker entry point.
+ * Called by POST /api/outbound/worker (cron or manual).
+ */
+export async function runOutboundWorker(): Promise<{ processed: number; skipped: number; errors: number }> {
+  console.log('[OutboundWorker] Starting run at', new Date().toISOString());
+
+  let processed = 0, skipped = 0, errors = 0;
+
+  // 1. Get all active high-tier clients
+  let clients;
+  try {
+    clients = await getAllActiveClients();
+  } catch (err) {
+    console.error('[OutboundWorker] Failed to load clients:', err);
+    return { processed, skipped, errors: 1 };
+  }
+
+  const highTierClients = clients.filter(c =>
+    c.tier === 'high' &&
+    c.outbound_enabled === true &&
+    c.outbound_mode !== 'paused'
+  );
+
+  console.log(`[OutboundWorker] Found ${highTierClients.length} active high-tier clients`);
+
+  // 2. Process each client
+  for (const client of highTierClients) {
+    try {
+      const result = await processClientOutbound(client);
+      processed += result.processed;
+      skipped   += result.skipped;
+    } catch (err) {
+      errors++;
+      console.error(`[OutboundWorker] Error for client ${client.businessId}:`, err);
+      await logError({
+        business_id:   client.businessId,
+        error_type:    'outbound_worker',
+        error_message: String(err),
+        timestamp:     new Date().toISOString(),
+      }).catch(() => {});
+    }
+  }
+
+  console.log(`[OutboundWorker] Run complete — processed: ${processed}, skipped: ${skipped}, errors: ${errors}`);
+  return { processed, skipped, errors };
+}
+
+/**
+ * Process outbound queue for one client.
+ */
+async function processClientOutbound(
+  client: any
+): Promise<{ processed: number; skipped: number }> {
+  let processed = 0, skipped = 0;
+
+  // Read queue
+  let queueRows: string[][];
+  try {
+    queueRows = await readSheetTab(client.googleSheetId, 'Outbound Queue');
+  } catch (err) {
+    console.error(`[OutboundWorker] Could not read Outbound Queue for ${client.businessId}:`, err);
+    return { processed, skipped };
+  }
+
+  if (!queueRows || queueRows.length < 2) {
+    console.log(`[OutboundWorker] No queue rows for ${client.businessId}`);
+    return { processed, skipped };
+  }
+
+  const queue = parseQueueRows(queueRows);
+  const readyLeads = queue.filter(l => l.status === 'Ready');
+
+  if (readyLeads.length === 0) {
+    console.log(`[OutboundWorker] No ready leads for ${client.businessId}`);
+    return { processed, skipped };
+  }
+
+  // Check daily limit
+  const dailyLimit = client.outbound_daily_limit || 20;
+  const todayAttempts = await getTodayOutboundAttempts(client.googleSheetId);
+  let remainingToday = dailyLimit - todayAttempts;
+
+  console.log(`[OutboundWorker] ${client.businessId}: ${readyLeads.length} ready leads, ${remainingToday} slots today`);
+
+  for (const lead of readyLeads) {
+    if (remainingToday <= 0) {
+      console.log(`[OutboundWorker] Daily limit reached for ${client.businessId}`);
+      break;
+    }
+
+    // Run eligibility check
+    const eligibility = await checkOutboundEligibility(lead, client);
+
+    if (!eligibility.eligible) {
+      await updateOutboundQueueRow(client.googleSheetId, lead.lead_id, {
+        status:             'Blocked',
+        validation_status:  'Blocked',
+        validation_notes:   eligibility.validationNotes,
+      });
+      skipped++;
+      continue;
+    }
+
+    // Build system prompt for this outbound call
+    let systemPrompt: string;
+    try {
+      systemPrompt = await buildOutboundPrompt(lead, client);
+    } catch (err) {
+      console.error(`[OutboundWorker] Failed to build prompt for lead ${lead.lead_id}:`, err);
+      skipped++;
+      continue;
+    }
+
+    // Place the call
+    let callSid: string;
+    try {
+      callSid = await placeOutboundCall(lead.phone_number, client, systemPrompt);
+    } catch (err) {
+      console.error(`[OutboundWorker] Failed to place call for lead ${lead.lead_id}:`, err);
+      await updateOutboundQueueRow(client.googleSheetId, lead.lead_id, {
+        status: 'Error',
+        validation_notes: `Call placement failed: ${String(err)}`,
+      });
+      skipped++;
+      continue;
+    }
+
+    // Update queue row
+    await updateOutboundQueueRow(client.googleSheetId, lead.lead_id, {
+      status:                'In Progress',
+      attempt_count:         lead.attempt_count + 1,
+      last_interaction_date: new Date().toISOString(),
+    });
+
+    // Log the attempt
+    const attemptLog: OutboundAttemptLog = {
+      attempt_id:  generateId('OA'),
+      lead_id:     lead.lead_id,
+      business_id: client.businessId,
+      call_sid:    callSid,
+      campaign_type: lead.campaign_type,
+      lead_name:   lead.lead_name,
+      lead_phone:  lead.phone_number,
+      attempted_at: new Date().toISOString(),
+      status:      'Placed',
+      notes:       '',
+    };
+
+    await appendToSheet(client.googleSheetId, 'Outbound Attempts', [
+      attemptLog.attempt_id, attemptLog.lead_id, attemptLog.business_id,
+      attemptLog.call_sid, attemptLog.campaign_type, attemptLog.lead_name,
+      attemptLog.lead_phone, attemptLog.attempted_at, attemptLog.status, attemptLog.notes,
+    ]);
+
+    await logEvent({
+      event_type:  'outbound_call_placed',
+      business_id: client.businessId,
+      metadata:    { lead_id: lead.lead_id, call_sid: callSid, campaign: lead.campaign_type },
+      timestamp:   new Date().toISOString(),
+    });
+
+    processed++;
+    remainingToday--;
+
+    // Small delay between calls to avoid Twilio rate limits
+    await sleep(1500);
+  }
+
+  return { processed, skipped };
+}
+
+/**
+ * Build the outbound system prompt by injecting lead + campaign variables
+ * into the high-tier-agent.txt template.
+ */
+async function buildOutboundPrompt(lead: OutboundQueueRow, client: any): Promise<string> {
+  const agentPromptPath = path.join(process.cwd(), 'agents', 'high-tier-agent.txt');
+  let template: string;
+
+  try {
+    template = fs.readFileSync(agentPromptPath, 'utf-8');
+  } catch {
+    throw new Error('high-tier-agent.txt not found');
+  }
+
+  // Load campaign-specific inputs from client workbook
+  let campaignOpener  = `Hi, is this ${lead.lead_name}? This is calling from ${client.businessName}.`;
+  let campaignQuestions = lead.desired_outcome;
+
+  try {
+    const rows = await readSheetTab(client.googleSheetId, 'Business / Campaign Inputs');
+    const campaignRow = (rows ?? []).slice(1).find(r => r[0] === lead.campaign_type);
+    if (campaignRow) {
+      campaignOpener    = campaignRow[2] || campaignOpener;
+      campaignQuestions = campaignRow[3] || campaignQuestions;
+    }
+  } catch { /* use defaults */ }
+
+  return template
+    .replace(/\[CALL_DIRECTION\]/g,          'outbound')
+    .replace(/\[LEAD_NAME\]/g,               lead.lead_name)
+    .replace(/\[BUSINESS_NAME\]/g,           client.businessName)
+    .replace(/\[AGENT_NAME\]/g,              client.agentName || 'the assistant')
+    .replace(/\[CAMPAIGN_TYPE\]/g,           lead.campaign_type)
+    .replace(/\[CALL_REASON\]/g,             lead.call_reason || lead.campaign_type)
+    .replace(/\[DESIRED_OUTCOME\]/g,         lead.desired_outcome)
+    .replace(/\[RELATIONSHIP_TYPE\]/g,       lead.relationship_type)
+    .replace(/\[LAST_INTERACTION\]/g,        lead.last_interaction_date || 'recently')
+    .replace(/\[CAMPAIGN_OPENER_PLACEHOLDER\]/g, campaignOpener)
+    .replace(/\[CAMPAIGN_QUESTIONS_PLACEHOLDER\]/g, campaignQuestions)
+    .replace(/\[LEAD_PHONE\]/g,              lead.phone_number)
+    .replace(/\[BUSINESS_ID\]/g,             client.businessId);
+}
+
+/**
+ * Place an outbound call via Twilio using Realtime API.
+ * Returns the call SID.
+ */
+async function placeOutboundCall(
+  toPhone: string,
+  client: any,
+  systemPrompt: string
+): Promise<string> {
+  const twilioClient = twilio(
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.TWILIO_AUTH_TOKEN
+  );
+
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  const encodedPrompt = encodeURIComponent(systemPrompt);
+
+  const call = await twilioClient.calls.create({
+    to:   toPhone,
+    from: process.env.TWILIO_PHONE_NUMBER!,
+    url:  `${baseUrl}/api/voice/stream?direction=outbound&businessId=${client.businessId}&prompt=${encodedPrompt}`,
+    statusCallback:       `${baseUrl}/api/outbound/result`,
+    statusCallbackMethod: 'POST',
+    statusCallbackEvent:  ['completed', 'failed', 'no-answer', 'busy'],
+    machineDetection:     'DetectMessageEnd',  // skip answering machines
+    asyncAmd:             'true',
+  });
+
+  console.log(`[OutboundWorker] Call placed: ${call.sid} to ${toPhone}`);
+  return call.sid;
+}
+
+// ── Queue helpers ─────────────────────────────────────────────────────────────
+
+function parseQueueRows(rows: string[][]): OutboundQueueRow[] {
+  return rows.slice(1)
+    .filter(row => row[0])
+    .map(row => ({
+      lead_id:               row[0],
+      lead_name:             row[1],
+      phone_number:          row[2],
+      email:                 row[3],
+      source:                row[4],
+      campaign_type:         row[5],
+      service_interest:      row[6],
+      call_reason:           row[7],
+      desired_outcome:       row[8],
+      relationship_type:     row[9],
+      consent_status:        row[10],
+      consent_source:        row[11],
+      last_interaction_date: row[12],
+      preferred_call_window: row[13],
+      call_window_start:     row[14],
+      call_window_end:       row[15],
+      attempt_count:         parseInt(row[16] ?? '0', 10),
+      max_attempts:          parseInt(row[17] ?? '3', 10),
+      status:                row[18],
+      priority:              row[19],
+      opt_out:               row[20] === 'TRUE',
+      client_attestation:    row[21] === 'TRUE',
+      validation_status:     row[22],
+      validation_notes:      row[23],
+      notes:                 row[24],
+    }));
+}
+
+async function updateOutboundQueueRow(
+  sheetId: string,
+  leadId: string,
+  updates: Record<string, any>
+): Promise<void> {
+  // Implementation delegates to googleSheets utility
+  await updateSheetRow(sheetId, 'Outbound Queue', leadId, updates);
+}
+
+async function getTodayOutboundAttempts(sheetId: string): Promise<number> {
+  try {
+    const rows = await readSheetTab(sheetId, 'Outbound Attempts');
+    const today = new Date().toISOString().split('T')[0];
+    return (rows ?? []).slice(1).filter(row => (row[7] ?? '').startsWith(today)).length;
+  } catch { return 0; }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}

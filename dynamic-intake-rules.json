@@ -1,0 +1,259 @@
+# Low Tier (Starter) — Google Sheets Workbook Template
+
+**Who this is for:** Starter 100 / Starter 200 / Starter 300 clients  
+**Total tabs:** 12  
+**Protection:** Tabs marked 🔒 should be protected. Clients may view but not edit.
+
+---
+
+## HOW TO SET UP
+
+1. Make a copy of the Low Tier Master Template spreadsheet.
+2. Rename it: `[Business Name] — Voice Agent`
+3. Share with the Google Service Account email (from your `.env`): **Editor** access.
+4. Paste the Sheet ID into the Master Backend Sheet → Client Roster → Column G.
+5. Fill in the Business Info tab.
+6. Set up protection on all 🔒 tabs (see Protection Instructions at bottom).
+
+---
+
+## TAB 1: Business Info
+
+Client-editable. Fill in before going live.
+
+| Cell | Field | Example |
+|------|-------|---------|
+| B2 | Business Name | Sunrise Roofing LLC |
+| B3 | Owner Name | Mike Johnson |
+| B4 | Owner Email | mike@sunriseroofing.com |
+| B5 | Owner Phone | +15125559876 |
+| B6 | Business Phone (Twilio #) | +15125551234 |
+| B7 | Agent Name | Alex |
+| B8 | Business Hours Start | 08:00 |
+| B9 | Business Hours End | 18:00 |
+| B10 | Time Zone | America/Chicago |
+| B11 | Calendly Link (General) | https://calendly.com/sunriseroofing |
+| B12 | Primary Service | Roofing |
+| B13 | Address | 123 Main St, Austin TX 78701 |
+| B14 | Package | starter-200 |
+| B15 | Sheet ID | (auto-filled by backend) |
+| B16 | Business ID | (assigned by you) |
+
+---
+
+## TAB 2: Call Log 🔒
+
+All inbound call records. Written by backend — do not edit manually.
+
+| Col | Field | Notes |
+|-----|-------|-------|
+| A | call_id | Auto-generated |
+| B | call_date | YYYY-MM-DD |
+| C | call_time | HH:MM:SS |
+| D | caller_name | From AI output |
+| E | caller_phone | Confirmed callback number |
+| F | caller_email | Optional |
+| G | language | en or es |
+| H | service_requested | Service identified on call |
+| I | call_outcome | New Lead, Pricing Question, etc. |
+| J | lead_score | 0–100 |
+| K | lead_priority | Critical / Urgent / High / Medium / Low |
+| L | is_new_customer | TRUE / FALSE / blank |
+| M | urgency | Emergency / Urgent / Standard / Flexible / Low |
+| N | caller_intent | new_appointment, pricing_inquiry, etc. |
+| O | call_reason | Short label |
+| P | calendly_link_sent | TRUE / FALSE |
+| Q | callback_needed | TRUE / FALSE |
+| R | human_handoff_needed | TRUE / FALSE |
+| S | is_spam | TRUE / FALSE |
+| T | ai_summary | 2–3 sentence summary |
+| U | next_action | What should happen next |
+| V | assigned_to | (blank for low tier) |
+| W | notes | Agent or team notes |
+
+---
+
+## TAB 3: Needs Attention Today
+
+Auto-filtered view of Call Log showing open callbacks and urgent calls.  
+Formula-driven — do not add rows manually.
+
+| Col | Field |
+|-----|-------|
+| A | call_date |
+| B | caller_name |
+| C | caller_phone |
+| D | service_requested |
+| E | urgency |
+| F | callback_needed |
+| G | next_action |
+| H | resolved (team fills: TRUE when done) |
+
+**Setup:** Add a filter or use `=FILTER(...)` pulling from Call Log where callback_needed=TRUE OR urgency=Urgent.
+
+---
+
+## TAB 4: Appointments
+
+Tracks all requested/confirmed appointments.
+
+| Col | Field |
+|-----|-------|
+| A | appointment_id |
+| B | caller_name |
+| C | caller_phone |
+| D | service_requested |
+| E | appointment_date |
+| F | appointment_time |
+| G | status (Pending Confirmation / Confirmed / Cancelled / No-Show) |
+| H | notes |
+| I | reminder_sent (TRUE/FALSE) |
+| J | language |
+| K | call_id (links back to Call Log) |
+
+---
+
+## TAB 5: FAQ List
+
+Client-editable. Define approved answers the AI may give.
+
+| Col | Field |
+|-----|-------|
+| A | question |
+| B | approved_answer |
+| C | service_category (optional) |
+| D | active (TRUE/FALSE) |
+
+**Important:** The AI will ONLY answer questions in this list. Anything not listed gets "the team will follow up."
+
+**Minimum recommended FAQs to fill in:**
+- What are your hours?
+- Where are you located?
+- Do you offer free estimates?
+- How do I schedule an appointment?
+- What areas do you serve?
+
+---
+
+## TAB 6: Lead Scoring Rules
+
+Defines how the AI scores leads. Low tier uses basic scoring.
+
+| Col | Field | Example |
+|-----|-------|---------|
+| A | signal | asked_for_appointment |
+| B | score_adjustment | +30 |
+| C | notes | Highest intent signal |
+
+Pre-filled with default scoring rules. Client should not need to change this.
+
+---
+
+## TAB 7: Calendly Links
+
+Maps services to Calendly booking links (or defaults to general link).
+
+| Col | Field |
+|-----|-------|
+| A | service_name |
+| B | calendly_url |
+| C | notes |
+
+---
+
+## TAB 8: Do Not Call / Opt-Outs 🔒
+
+Phones that should never be called again.
+
+| Col | Field |
+|-----|-------|
+| A | dnc_id |
+| B | phone_number |
+| C | name |
+| D | reason |
+| E | added_date |
+
+---
+
+## TAB 9: SMS Log 🔒
+
+Record of all SMS messages sent.
+
+| Col | Field |
+|-----|-------|
+| A | sms_id |
+| B | sent_at |
+| C | to_phone |
+| D | message_body |
+| E | type (calendly / reminder / followup) |
+| F | status |
+| G | call_id |
+
+---
+
+## TAB 10: Missed Call Recovery 🔒
+
+Tracks callers who missed or hung up before speaking with the AI.
+
+| Col | Field |
+|-----|-------|
+| A | missed_id |
+| B | phone_number |
+| C | missed_at |
+| D | recovery_sms_sent (TRUE/FALSE) |
+| E | sms_sent_at |
+| F | responded (TRUE/FALSE) |
+
+---
+
+## TAB 11: Monthly Usage 🔒
+
+Tracks inbound call and minute usage against package limits.
+
+| Col | Field |
+|-----|-------|
+| A | month |
+| B | inbound_calls_used |
+| C | inbound_calls_limit |
+| D | inbound_minutes_used |
+| E | inbound_minutes_limit |
+| F | overage_minutes |
+| G | estimated_overage_cost |
+
+---
+
+## TAB 12: Error Log 🔒
+
+Backend error records. Backend-only.
+
+| Col | Field |
+|-----|-------|
+| A | timestamp |
+| B | error_type |
+| C | error_message |
+| D | call_sid |
+
+---
+
+## PROTECTION INSTRUCTIONS
+
+1. Open your Google Sheet.
+2. Right-click the tab name → **Protect sheet**.
+3. Click **Set permissions** → **Restrict who can edit this range**.
+4. Select **Only you** (or add the service account as an editor, remove all others).
+5. Repeat for all 🔒 tabs: Call Log, Needs Attention Today, Appointments (partially), Do Not Call, SMS Log, Missed Call Recovery, Monthly Usage, Error Log.
+
+**Client-editable tabs:** Business Info, FAQ List, Calendly Links
+
+---
+
+## GOING LIVE CHECKLIST
+
+- [ ] Business Info tab fully filled in
+- [ ] At least 5 FAQs entered
+- [ ] Calendly general link entered
+- [ ] Sheet shared with service account (Editor)
+- [ ] Sheet ID pasted into Master Backend Sheet
+- [ ] Twilio phone number mapped to this client in Master Backend Sheet
+- [ ] Test call made and verified in Call Log
+- [ ] Morning summary email received

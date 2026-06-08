@@ -1,0 +1,672 @@
+/**
+ * SETUP_ALL_SHEETS.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Run this ONE TIME in the Master Backend sheet.
+ * It will:
+ *   1. Set up Master Backend tabs + headers
+ *   2. Create the Low Tier template workbook
+ *   3. Create the Medium Tier template workbook
+ *   4. Create the High Tier template workbook
+ *
+ * HOW TO USE:
+ *   1. Open your "Voice Agent + Master Backend" Google Sheet
+ *   2. Click Extensions → Apps Script
+ *   3. Delete all existing code
+ *   4. Paste this entire file
+ *   5. Click Save
+ *   6. Click Run → setupEverything
+ *   7. Approve permissions when prompted
+ *   8. Wait ~60 seconds — you'll see an alert when done
+ */
+
+function setupEverything() {
+  setupMasterBackend();
+  var lowId    = createLowTierWorkbook();
+  var mediumId = createMediumTierWorkbook();
+  var highId   = createHighTierWorkbook();
+
+  // Write the new sheet IDs into Master Backend for reference
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ref = ss.getSheetByName('Sheet Reference');
+  if (!ref) ref = ss.insertSheet('Sheet Reference');
+  ref.clearContents();
+  ref.getRange('A1:B1').setValues([['Workbook', 'Sheet ID']]);
+  ref.getRange('A2:B4').setValues([
+    ['Low Tier Template',    lowId],
+    ['Medium Tier Template', mediumId],
+    ['High Tier Template',   highId],
+  ]);
+  ref.getRange('A1:B1').setFontWeight('bold').setBackground('#1a1a2e').setFontColor('#ffffff');
+  ref.setColumnWidth(1, 200);
+  ref.setColumnWidth(2, 400);
+
+  SpreadsheetApp.getUi().alert(
+    '✅ Setup Complete!',
+    'All 4 sheets are ready:\n\n' +
+    '• Master Backend — this sheet\n' +
+    '• Low Tier Template — ID: ' + lowId + '\n' +
+    '• Medium Tier Template — ID: ' + mediumId + '\n' +
+    '• High Tier Template — ID: ' + highId + '\n\n' +
+    'Check the "Sheet Reference" tab for all IDs.\n' +
+    'Check your Google Drive for the new workbooks.',
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MASTER BACKEND SETUP
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function setupMasterBackend() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // ── Client Roster ──────────────────────────────────────────────────────────
+  var roster = getOrCreateSheet(ss, 'Client Roster');
+  roster.clearContents();
+  var rosterHeaders = [
+    'business_id','business_name','owner_email','owner_phone','tier',
+    'package_key','google_sheet_id','twilio_phone_number','agent_name',
+    'calendly_link','business_hours_start','business_hours_end',
+    'business_timezone','package_display','active','outbound_enabled',
+    'outbound_mode','outbound_daily_limit','outbound_call_window_start',
+    'outbound_call_window_end','outbound_timezone','monthly_outbound_limit',
+    'outbound_calls_used_this_month'
+  ];
+  setHeaders(roster, rosterHeaders, '#1a1a2e', '#ffffff');
+  setColumnWidths(roster, [150,200,220,150,80,120,350,180,100,280,120,120,180,120,70,120,200,120,180,180,180,150,200]);
+
+  // Add demo row
+  roster.getRange('A2:W2').setValues([[
+    'test-biz-001','Test Business','your@email.com','','low',
+    'starter-100','PASTE_CLIENT_SHEET_ID_HERE','+18135376102','Alex',
+    'https://calendly.com/yourbusiness','08:00','18:00','America/Chicago',
+    'Starter 100','TRUE','FALSE','paused',20,'09:00','18:00',
+    'America/Chicago',100,0
+  ]]);
+  roster.getRange('A2:W2').setBackground('#e8f5e9');
+
+  // ── Events Log ─────────────────────────────────────────────────────────────
+  var events = getOrCreateSheet(ss, 'Events Log');
+  events.clearContents();
+  setHeaders(events, ['timestamp','event_type','business_id','metadata'], '#1a1a2e', '#ffffff');
+
+  // ── Error Log ──────────────────────────────────────────────────────────────
+  var errors = getOrCreateSheet(ss, 'Error Log');
+  errors.clearContents();
+  setHeaders(errors, ['timestamp','business_id','error_type','error_message','call_sid'], '#b71c1c', '#ffffff');
+
+  // ── Usage Tracker ──────────────────────────────────────────────────────────
+  var usage = getOrCreateSheet(ss, 'Usage Tracker');
+  usage.clearContents();
+  setHeaders(usage, ['month','business_id','business_name','tier','inbound_calls','inbound_minutes','outbound_calls','outbound_minutes','total_overage_cost'], '#1a1a2e', '#ffffff');
+
+  // Delete default Sheet1 if it exists
+  var sheet1 = ss.getSheetByName('Sheet1');
+  if (sheet1 && ss.getSheets().length > 1) ss.deleteSheet(sheet1);
+
+  // Format the whole workbook
+  ss.setSpreadsheetName('Voice Agent — Master Backend');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LOW TIER WORKBOOK
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function createLowTierWorkbook() {
+  var ss = SpreadsheetApp.create('LOW TIER TEMPLATE — Voice Agent (Starter)');
+  var id = ss.getId();
+
+  buildBusinessInfoTab(ss);
+  buildCallLogTab(ss, 'low');
+  buildNeedsAttentionTab(ss);
+  buildAppointmentsTab(ss);
+  buildFAQTab(ss);
+  buildLeadScoringTab(ss, 'low');
+  buildCalendlyTab(ss);
+  buildDNCTab(ss);
+  buildSMSLogTab(ss);
+  buildMissedCallTab(ss);
+  buildMonthlyUsageTab(ss, 'low');
+  buildErrorLogTab(ss);
+
+  // Remove default sheet
+  var def = ss.getSheetByName('Sheet1');
+  if (def && ss.getSheets().length > 1) ss.deleteSheet(def);
+
+  ss.setActiveSheet(ss.getSheetByName('Business Info'));
+  return id;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MEDIUM TIER WORKBOOK
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function createMediumTierWorkbook() {
+  var ss = SpreadsheetApp.create('MEDIUM TIER TEMPLATE — Voice Agent (Smart)');
+  var id = ss.getId();
+
+  // All low tier tabs
+  buildBusinessInfoTab(ss);
+  buildCallLogTab(ss, 'medium');
+  buildNeedsAttentionTab(ss);
+  buildAppointmentsTab(ss);
+  buildFAQTab(ss);
+  buildLeadScoringTab(ss, 'medium');
+  buildCalendlyTab(ss);
+  buildDNCTab(ss);
+  buildSMSLogTab(ss);
+  buildMissedCallTab(ss);
+  buildMonthlyUsageTab(ss, 'medium');
+  buildErrorLogTab(ss);
+
+  // Medium-only tabs
+  buildRecordingsTab(ss);
+  buildQualityScoresTab(ss);
+  buildDynamicIntakeTab(ss);
+  buildServiceQuestionsTab(ss);
+  buildAdvancedLeadScoringTab(ss);
+  buildLostLeadAlertsTab(ss);
+  buildStaffAssignmentTab(ss);
+  buildWeeklyReportsTab(ss);
+  buildMonthlyOptimizationTab(ss);
+
+  var def = ss.getSheetByName('Sheet1');
+  if (def && ss.getSheets().length > 1) ss.deleteSheet(def);
+
+  ss.setActiveSheet(ss.getSheetByName('Business Info'));
+  return id;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HIGH TIER WORKBOOK
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function createHighTierWorkbook() {
+  var ss = SpreadsheetApp.create('HIGH TIER TEMPLATE — Voice Agent (Sales)');
+  var id = ss.getId();
+
+  // All low tier tabs
+  buildBusinessInfoTab(ss);
+  buildCallLogTab(ss, 'high');
+  buildNeedsAttentionTab(ss);
+  buildAppointmentsTab(ss);
+  buildFAQTab(ss);
+  buildLeadScoringTab(ss, 'medium');
+  buildCalendlyTab(ss);
+  buildDNCTab(ss);
+  buildSMSLogTab(ss);
+  buildMissedCallTab(ss);
+  buildMonthlyUsageTab(ss, 'high');
+  buildErrorLogTab(ss);
+
+  // Medium tabs
+  buildRecordingsTab(ss);
+  buildQualityScoresTab(ss);
+  buildDynamicIntakeTab(ss);
+  buildServiceQuestionsTab(ss);
+  buildAdvancedLeadScoringTab(ss);
+  buildLostLeadAlertsTab(ss);
+  buildStaffAssignmentTab(ss);
+  buildWeeklyReportsTab(ss);
+  buildMonthlyOptimizationTab(ss);
+
+  // High-only tabs
+  buildSubmitLeadTab(ss);
+  buildCampaignInputsTab(ss);
+  buildOutboundQueueTab(ss);
+  buildOutboundAttemptsTab(ss);
+  buildOutboundResultsTab(ss);
+  buildResponseLibraryTab(ss);
+  buildObjectionBankTab(ss);
+  buildWinningPhrasesTab(ss);
+  buildAISuggestionsTab(ss);
+  buildBestTimeToCallTab(ss);
+  buildCampaignAnalyticsTab(ss);
+  buildOutboundUsageTab(ss);
+  buildCampaignPerformanceTab(ss);
+
+  var def = ss.getSheetByName('Sheet1');
+  if (def && ss.getSheets().length > 1) ss.deleteSheet(def);
+
+  ss.setActiveSheet(ss.getSheetByName('Business Info'));
+  return id;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SHARED TAB BUILDERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function buildBusinessInfoTab(ss) {
+  var s = getOrCreateSheet(ss, 'Business Info');
+  s.clearContents();
+  var labels = [
+    ['Business Name',''],['Owner Name',''],['Owner Email',''],['Owner Phone',''],
+    ['Business Phone (Twilio #)',''],['Agent Name','Alex'],
+    ['Business Hours Start','08:00'],['Business Hours End','18:00'],
+    ['Time Zone','America/Chicago'],['Calendly Link (General)',''],
+    ['Primary Service',''],['Address',''],['Package',''],
+    ['Business ID',''],['Tier','low'],['Google Sheet ID','(auto-filled)']
+  ];
+  for (var i = 0; i < labels.length; i++) {
+    s.getRange(i+1, 1).setValue(labels[i][0]).setFontWeight('bold').setBackground('#f5f5f5');
+    s.getRange(i+1, 2).setValue(labels[i][1]);
+  }
+  s.setColumnWidth(1, 220);
+  s.setColumnWidth(2, 350);
+  s.getRange('A1:A16').setBackground('#e8eaf6');
+}
+
+function buildCallLogTab(ss, tier) {
+  var s = getOrCreateSheet(ss, 'Call Log');
+  s.clearContents();
+  var headers = [
+    'call_id','call_date','call_time','caller_name','caller_phone','caller_email',
+    'language','service_requested','call_outcome','lead_score','lead_priority',
+    'is_new_customer','urgency','caller_intent','call_reason',
+    'calendly_link_sent','callback_needed','human_handoff_needed','is_spam',
+    'ai_summary','next_action','assigned_to','notes'
+  ];
+  if (tier === 'medium' || tier === 'high') {
+    headers = headers.concat(['intent_confidence','dynamic_questions_asked','lost_lead_risk','lost_lead_reason','recording_sid']);
+  }
+  if (tier === 'high') {
+    headers = headers.concat(['direction','campaign_type','lead_id']);
+  }
+  setHeaders(s, headers, '#1a1a2e', '#ffffff');
+  s.setFrozenRows(1);
+  s.getRange('A1:1').setFontWeight('bold');
+}
+
+function buildNeedsAttentionTab(ss) {
+  var s = getOrCreateSheet(ss, 'Needs Attention Today');
+  s.clearContents();
+  setHeaders(s, ['call_date','caller_name','caller_phone','service_requested','urgency','callback_needed','next_action','resolved'], '#e65100', '#ffffff');
+  s.getRange('A2').setValue('← This tab is manually updated daily from Call Log. Filter for callback_needed=TRUE or urgency=Urgent.');
+  s.getRange('A2').setFontStyle('italic').setFontColor('#999999');
+}
+
+function buildAppointmentsTab(ss) {
+  var s = getOrCreateSheet(ss, 'Appointments');
+  s.clearContents();
+  setHeaders(s, ['appointment_id','caller_name','caller_phone','service_requested','appointment_date','appointment_time','status','notes','reminder_sent','language','call_id'], '#1b5e20', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+function buildFAQTab(ss) {
+  var s = getOrCreateSheet(ss, 'FAQ List');
+  s.clearContents();
+  setHeaders(s, ['question','approved_answer','service_category','active'], '#4a148c', '#ffffff');
+  var faqs = [
+    ['What are your hours?','We are open Monday through Friday, 8am to 6pm.','General','TRUE'],
+    ['Where are you located?','We are based in [YOUR CITY] and serve the surrounding area.','General','TRUE'],
+    ['Do you offer free estimates?','Yes, we offer free estimates — I can send you a link to book one right now.','General','TRUE'],
+    ['How do I schedule an appointment?','I can send you a booking link right now — what\'s the best number to text it to?','General','TRUE'],
+    ['What areas do you serve?','We serve [YOUR SERVICE AREA]. If you\'re not sure, let me take your info and we\'ll confirm.','General','TRUE'],
+  ];
+  s.getRange(2, 1, faqs.length, 4).setValues(faqs);
+  s.setColumnWidth(1, 300);
+  s.setColumnWidth(2, 400);
+  s.setFrozenRows(1);
+}
+
+function buildLeadScoringTab(ss, tier) {
+  var s = getOrCreateSheet(ss, 'Lead Scoring Rules');
+  s.clearContents();
+  setHeaders(s, ['signal','score_adjustment','condition','notes'], '#37474f', '#ffffff');
+  var rules = [
+    ['asked_for_appointment','+30','callerIntent = new_appointment','Highest intent signal'],
+    ['urgency_mentioned','+25','urgency = Urgent or Emergency','Time pressure = high intent'],
+    ['pricing_question','+20','callerIntent = pricing_inquiry','Actively evaluating'],
+    ['new_customer','+15','isNewCustomer = true','New business opportunity'],
+    ['calendly_accepted','+15','calendlyLinkSent = true','Took action on the call'],
+    ['gave_email','+10','callerEmail is present','Extra engagement signal'],
+    ['gave_preferred_time','+10','preferredDate or preferredTime given','Planning ahead'],
+    ['vague_response','-10','said "just browsing" or "maybe later"','Low commitment'],
+    ['hours_only','-15','callerIntent = hours_location','Likely not ready to buy'],
+    ['price_resistance','-20','expressed strong price objection','Barrier to conversion'],
+    ['hung_up_early','-30','no name or phone collected','Poor quality contact'],
+  ];
+  s.getRange(2, 1, rules.length, 4).setValues(rules);
+  s.setColumnWidth(1, 220);
+  s.setColumnWidth(2, 120);
+  s.setColumnWidth(3, 300);
+  s.setColumnWidth(4, 280);
+}
+
+function buildCalendlyTab(ss) {
+  var s = getOrCreateSheet(ss, 'Calendly Links');
+  s.clearContents();
+  setHeaders(s, ['service_name','calendly_url','notes'], '#006064', '#ffffff');
+  s.getRange('A2:C2').setValues([['General (Default)','https://calendly.com/YOURBUSINESS','Used when no service match']]);
+  s.setColumnWidth(2, 350);
+}
+
+function buildDNCTab(ss) {
+  var s = getOrCreateSheet(ss, 'Do Not Call / Opt-Outs');
+  s.clearContents();
+  setHeaders(s, ['dnc_id','phone_number','name','reason','added_date','added_by'], '#b71c1c', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+function buildSMSLogTab(ss) {
+  var s = getOrCreateSheet(ss, 'SMS Log');
+  s.clearContents();
+  setHeaders(s, ['sms_id','sent_at','to_phone','message_body','type','status','call_id'], '#1a1a2e', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+function buildMissedCallTab(ss) {
+  var s = getOrCreateSheet(ss, 'Missed Call Recovery');
+  s.clearContents();
+  setHeaders(s, ['missed_id','phone_number','missed_at','recovery_sms_sent','sms_sent_at','responded'], '#e65100', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+function buildMonthlyUsageTab(ss, tier) {
+  var s = getOrCreateSheet(ss, 'Monthly Usage');
+  s.clearContents();
+  var headers = ['month','inbound_calls_used','inbound_calls_limit','inbound_minutes_used','inbound_minutes_limit','overage_minutes','estimated_overage_cost'];
+  if (tier === 'high') headers = headers.concat(['outbound_calls_used','outbound_calls_limit','outbound_minutes_used','outbound_minutes_limit','outbound_overage_cost']);
+  setHeaders(s, headers, '#37474f', '#ffffff');
+}
+
+function buildErrorLogTab(ss) {
+  var s = getOrCreateSheet(ss, 'Error Log');
+  s.clearContents();
+  setHeaders(s, ['timestamp','error_type','error_message','call_sid'], '#b71c1c', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+// ── Medium Tier Tabs ──────────────────────────────────────────────────────────
+
+function buildRecordingsTab(ss) {
+  var s = getOrCreateSheet(ss, 'Recordings');
+  s.clearContents();
+  setHeaders(s, ['recording_id','call_id','business_id','caller_name','caller_phone','call_date','call_time','recording_url','duration_seconds','service_requested','call_outcome','notes'], '#1b5e20', '#ffffff');
+  s.setColumnWidth(8, 350);
+  s.setFrozenRows(1);
+}
+
+function buildQualityScoresTab(ss) {
+  var s = getOrCreateSheet(ss, 'AI Quality Scores');
+  s.clearContents();
+  setHeaders(s, ['quality_score_id','call_id','business_id','scored_at','intent_identified','name_collected','phone_collected','service_collected','urgency_identified','calendly_offered_correctly','handoff_triggered_correctly','spam_detected_correctly','avoided_prohibited_answers','kept_responses_concise','outcome_classified_correctly','summary_quality_score','overall_score','issues_detected','recommended_fix'], '#4a148c', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+function buildDynamicIntakeTab(ss) {
+  var s = getOrCreateSheet(ss, 'Dynamic Intake Rules');
+  s.clearContents();
+  setHeaders(s, ['service_name','trigger_keywords','required_questions','optional_questions'], '#006064', '#ffffff');
+  var examples = [
+    ['Roofing','roof,leak,shingle,gutters,storm damage','Is this about a leak or an estimate?|Is water actively coming in right now?|Is this residential or commercial?|What is the property address?','Any previous repairs done?|Is it covered by insurance?'],
+    ['MedSpa','botox,filler,laser,coolsculpting,facial,treatment','Which treatment are you interested in?|Is this your first time receiving this service?|Are you looking for a consultation or a full appointment?','Do you have a preferred provider?|Morning or afternoon preference?'],
+    ['HVAC','hvac,ac,heat,furnace,air conditioning,cooling,heating','Is this a repair or a new installation?|Is your system currently not working?|Is this for a home or a commercial space?','How old is your current system?'],
+    ['Dental','dental,tooth,teeth,cleaning,cavity,crown,implant','Are you a new or existing patient?|What type of appointment do you need?|Are you experiencing any pain — is this urgent?','Do you have dental insurance?'],
+  ];
+  s.getRange(2, 1, examples.length, 4).setValues(examples);
+  s.setColumnWidth(1, 120);
+  s.setColumnWidth(2, 250);
+  s.setColumnWidth(3, 400);
+  s.setColumnWidth(4, 300);
+  s.getRange('D1').setNote('Separate multiple questions with a pipe character: |');
+  s.getRange('C1').setNote('Separate multiple questions with a pipe character: |');
+}
+
+function buildServiceQuestionsTab(ss) {
+  var s = getOrCreateSheet(ss, 'Service-Specific Questions');
+  s.clearContents();
+  setHeaders(s, ['service_name','question_1','question_2','question_3','question_4','question_5','calendly_link_override'], '#006064', '#ffffff');
+}
+
+function buildAdvancedLeadScoringTab(ss) {
+  var s = getOrCreateSheet(ss, 'Advanced Lead Scoring');
+  s.clearContents();
+  setHeaders(s, ['signal','score_adjustment','condition','notes'], '#37474f', '#ffffff');
+  s.getRange('A2').setValue('Add custom scoring rules here — they layer on top of the base rules in Lead Scoring Rules tab.');
+  s.getRange('A2').setFontStyle('italic').setFontColor('#999999');
+}
+
+function buildLostLeadAlertsTab(ss) {
+  var s = getOrCreateSheet(ss, 'Lost Lead Alerts');
+  s.clearContents();
+  setHeaders(s, ['alert_id','call_id','business_id','caller_name','caller_phone','service_requested','reason_lost_or_at_risk','lead_score','recommended_next_action','alert_sent','alert_date','resolved_by_team'], '#e65100', '#ffffff');
+  s.setFrozenRows(1);
+  s.getRange('L1').setNote('Set to TRUE once your team has followed up on this lead.');
+}
+
+function buildStaffAssignmentTab(ss) {
+  var s = getOrCreateSheet(ss, 'Staff Assignment Rules');
+  s.clearContents();
+  setHeaders(s, ['service_name','location','assigned_staff_name','assigned_staff_email','assigned_staff_phone','escalation_priority','notes'], '#1b5e20', '#ffffff');
+  s.getRange('A2:G2').setValues([['','','Owner / Front Desk','your@email.com','','Normal','Default catch-all — leave service_name and location blank']]);
+  s.getRange('A2:G2').setBackground('#e8f5e9');
+  s.setColumnWidth(3, 200);
+  s.setColumnWidth(4, 220);
+}
+
+function buildWeeklyReportsTab(ss) {
+  var s = getOrCreateSheet(ss, 'Weekly Reports');
+  s.clearContents();
+  setHeaders(s, ['report_id','week_ending','business_id','total_calls','new_leads','high_intent_leads','appointments_requested','calendly_links_sent','callbacks_needed','lost_leads','spam_filtered','avg_lead_score','avg_quality_score','top_services','recommendations'], '#1a1a2e', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+function buildMonthlyOptimizationTab(ss) {
+  var s = getOrCreateSheet(ss, 'Monthly Optimization Reports');
+  s.clearContents();
+  setHeaders(s, ['report_id','month','business_id','total_calls','total_leads','average_lead_score','average_quality_score','top_services_requested','common_questions','common_failure_points','recommended_faq_updates','recommended_script_updates','recommended_calendly_updates','notes'], '#1a1a2e', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+// ── High Tier Tabs ────────────────────────────────────────────────────────────
+
+function buildSubmitLeadTab(ss) {
+  var s = getOrCreateSheet(ss, 'Submit Outbound Lead');
+  s.clearContents();
+
+  // Title
+  s.getRange('A1:C1').merge().setValue('📞 Submit Outbound Lead').setFontSize(16).setFontWeight('bold').setBackground('#1a1a2e').setFontColor('#ffffff').setHorizontalAlignment('center');
+
+  var fields = [
+    ['Lead Name *', ''],
+    ['Phone Number *', ''],
+    ['Email Address', ''],
+    ['Campaign Type *', ''],
+    ['Service Interest', ''],
+    ['Desired Outcome *', ''],
+    ['Relationship Type *', ''],
+    ['Consent Status *', ''],
+    ['Consent Source', ''],
+    ['Last Interaction Date', ''],
+    ['Preferred Call Window', ''],
+    ['Notes', ''],
+    ['✅ Client Attestation *', false],
+  ];
+
+  for (var i = 0; i < fields.length; i++) {
+    var row = i + 3;
+    s.getRange(row, 1).setValue(fields[i][0]).setFontWeight('bold').setBackground('#f5f5f5');
+    s.getRange(row, 2).setValue(fields[i][1]).setBackground('#ffffff');
+    if (fields[i][0].indexOf('*') > -1) {
+      s.getRange(row, 1).setBackground('#e8eaf6');
+    }
+  }
+
+  // Attestation text
+  s.getRange('A16:C16').merge()
+    .setValue('I certify I have a legitimate, lawful basis to contact this individual. This is NOT a cold lead, scraped contact, or purchased list.')
+    .setFontStyle('italic').setFontColor('#666666').setWrap(true);
+
+  // Submit button area
+  s.getRange('B17').setValue('← Click "📞 Submit Lead" in the top menu to submit')
+    .setFontStyle('italic').setFontColor('#3a5bd9');
+
+  // Dropdowns
+  var campaignRule = SpreadsheetApp.newDataValidation().requireValueInList([
+    'missed_call_recovery','inbound_lead_followup','quote_followup',
+    'calendly_not_booked','appointment_confirmation','no_show_recovery',
+    'review_request','existing_customer_reactivation'
+  ], true).build();
+  s.getRange('B6').setDataValidation(campaignRule);
+
+  var relationshipRule = SpreadsheetApp.newDataValidation().requireValueInList([
+    'Missed Caller','Inbound Lead','Website Form Lead','Text/Email Responded',
+    'Quote Request','Existing Customer','Past Customer','No-Show',
+    'Appointment Holder','Review Request','Referral With Permission','Manual Review Approved'
+  ], true).build();
+  s.getRange('B9').setDataValidation(relationshipRule);
+
+  var consentRule = SpreadsheetApp.newDataValidation().requireValueInList([
+    'Approved','Prior Inquiry','Existing Customer','Appointment Related',
+    'Quote Requested','Manual Review Approved'
+  ], true).build();
+  s.getRange('B10').setDataValidation(consentRule);
+
+  // Checkbox for attestation
+  s.getRange('B15').insertCheckboxes();
+
+  s.setColumnWidth(1, 220);
+  s.setColumnWidth(2, 320);
+}
+
+function buildCampaignInputsTab(ss) {
+  var s = getOrCreateSheet(ss, 'Business / Campaign Inputs');
+  s.clearContents();
+  setHeaders(s, ['campaign_type','campaign_display_name','approved_opener','approved_questions','active_promotion','seasonal_note','max_attempts','call_window_start','call_window_end','notes'], '#1a1a2e', '#ffffff');
+  var examples = [
+    ['missed_call_recovery','Missed Call Recovery','Hi [LEAD_NAME], this is [AGENT_NAME] calling from [BUSINESS_NAME]. I saw you tried to reach us and wanted to make sure we got back to you. Do you have a quick moment?','What were you hoping we could help you with today?|Is this something urgent or can we schedule at your convenience?','','',3,'09:00','18:00','Most common campaign'],
+    ['quote_followup','Quote Follow-Up','Hi [LEAD_NAME], this is [AGENT_NAME] from [BUSINESS_NAME]. You received a quote from us recently and I wanted to see if you had any questions.','Did you get a chance to review the quote?|Is there anything that\'s holding you back?|Can I answer any questions about the scope or pricing?','','',2,'10:00','17:00','Run 48-72 hrs after quote sent'],
+    ['no_show_recovery','No-Show Recovery','Hi [LEAD_NAME], this is [AGENT_NAME] from [BUSINESS_NAME]. We noticed you weren\'t able to make your recent appointment — completely understandable! We\'d love to get you rescheduled.','What day works better for you?|Would mornings or afternoons be easier?|Can I send you a link to pick a time that works?','','',2,'09:00','18:00','Run same day or next day after no-show'],
+  ];
+  s.getRange(2, 1, examples.length, 10).setValues(examples);
+  s.setColumnWidth(3, 400);
+  s.setColumnWidth(4, 400);
+  s.setFrozenRows(1);
+}
+
+function buildOutboundQueueTab(ss) {
+  var s = getOrCreateSheet(ss, 'Outbound Queue');
+  s.clearContents();
+  setHeaders(s, ['lead_id','lead_name','phone_number','email','source','campaign_type','service_interest','call_reason','desired_outcome','relationship_type','consent_status','consent_source','last_interaction_date','preferred_call_window','call_window_start','call_window_end','attempt_count','max_attempts','status','priority','opt_out','client_attestation','validation_status','validation_notes','notes','lead_submitted_at','last_updated'], '#b71c1c', '#ffffff');
+  s.setFrozenRows(1);
+  s.getRange('A1:AA1').setNote('This tab is written by the system. Add leads via the Submit Outbound Lead tab only.');
+}
+
+function buildOutboundAttemptsTab(ss) {
+  var s = getOrCreateSheet(ss, 'Outbound Attempts');
+  s.clearContents();
+  setHeaders(s, ['attempt_id','lead_id','business_id','call_sid','campaign_type','lead_name','lead_phone','attempted_at','status','notes'], '#1a1a2e', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+function buildOutboundResultsTab(ss) {
+  var s = getOrCreateSheet(ss, 'Outbound Results');
+  s.clearContents();
+  setHeaders(s, ['result_id','lead_id','business_id','call_sid','campaign_type','lead_name','lead_phone','call_date','call_time','outcome','answered','booked','calendly_sent','callback_needed','human_followup_needed','opt_out_detected','objection_detected','objection_type','caller_sentiment','summary','next_action','next_followup_date','duration_seconds'], '#1b5e20', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+function buildResponseLibraryTab(ss) {
+  var s = getOrCreateSheet(ss, 'Response Library');
+  s.clearContents();
+  setHeaders(s, ['response_id','campaign_type','context','response_text','performance_notes','date_added','approved'], '#4a148c', '#ffffff');
+  s.getRange('G1').setNote('Set to TRUE to activate. FALSE = not used by AI.');
+  s.setFrozenRows(1);
+}
+
+function buildObjectionBankTab(ss) {
+  var s = getOrCreateSheet(ss, 'Objection Bank');
+  s.clearContents();
+  setHeaders(s, ['objection_id','objection_type','objection_text','approved_response','approved','success_rate','notes'], '#e65100', '#ffffff');
+  var objections = [
+    ['OBJ-001','Not Interested','I\'m not interested','Absolutely, I understand. Would it be okay if I sent a quick text with our contact info in case you ever need us down the road?','TRUE','',''],
+    ['OBJ-002','Too Busy','I\'m busy right now','No problem at all — when\'s a better time to reach you?','TRUE','',''],
+    ['OBJ-003','Already Have Someone','I already went with someone else','That\'s great — hope it went well! We\'d love to earn your business next time. I\'ll make a note and won\'t bother you further.','TRUE','',''],
+    ['OBJ-004','Too Expensive','It\'s too expensive / out of budget','I hear you. I can have someone reach out to walk through the options — there may be more flexibility than you\'d expect. Would that be okay?','TRUE','',''],
+  ];
+  s.getRange(2, 1, objections.length, 7).setValues(objections);
+  s.setFrozenRows(1);
+}
+
+function buildWinningPhrasesTab(ss) {
+  var s = getOrCreateSheet(ss, 'Winning Phrases');
+  s.clearContents();
+  setHeaders(s, ['phrase_id','campaign_type','phrase','context','approved','notes'], '#006064', '#ffffff');
+  s.getRange('E1').setNote('Set to TRUE to activate. FALSE = not used by AI.');
+  s.setFrozenRows(1);
+}
+
+function buildAISuggestionsTab(ss) {
+  var s = getOrCreateSheet(ss, 'AI Improvement Suggestions');
+  s.clearContents();
+  setHeaders(s, ['suggestion_id','call_id','business_id','suggestion_type','suggestion_text','reasoning','approved','created_at'], '#4a148c', '#ffffff');
+  s.getRange('G1').setNote('AI sets this to FALSE. YOU change it to TRUE to activate the suggestion.');
+  s.getRange('A2').setValue('← AI-generated suggestions appear here after low-scoring calls. Review and set approved=TRUE to use them.');
+  s.getRange('A2').setFontStyle('italic').setFontColor('#999999');
+  s.setFrozenRows(1);
+}
+
+function buildBestTimeToCallTab(ss) {
+  var s = getOrCreateSheet(ss, 'Best Time To Call');
+  s.clearContents();
+  setHeaders(s, ['day_of_week','hour_block','calls_attempted','calls_answered','answer_rate','bookings','booking_rate','recommendation'], '#1a1a2e', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+function buildCampaignAnalyticsTab(ss) {
+  var s = getOrCreateSheet(ss, 'Campaign Analytics');
+  s.clearContents();
+  setHeaders(s, ['campaign_type','calls_attempted','calls_answered','conversations_completed','bookings','calendly_links_sent','callbacks_requested','opt_outs','answer_rate','booking_rate','top_objection','top_question','recommended_change'], '#1a1a2e', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+function buildOutboundUsageTab(ss) {
+  var s = getOrCreateSheet(ss, 'Outbound Usage');
+  s.clearContents();
+  setHeaders(s, ['month','outbound_calls_attempted','outbound_calls_limit','outbound_minutes_used','outbound_minutes_limit','outbound_overage_minutes','estimated_outbound_overage_cost'], '#37474f', '#ffffff');
+}
+
+function buildCampaignPerformanceTab(ss) {
+  var s = getOrCreateSheet(ss, 'Campaign Performance Reports');
+  s.clearContents();
+  setHeaders(s, ['report_id','month','campaign_type','total_attempts','total_answered','total_booked','booking_rate','opt_out_rate','top_objection','improvement_recommendation','notes'], '#1a1a2e', '#ffffff');
+  s.setFrozenRows(1);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UTILITY FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function getOrCreateSheet(ss, name) {
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) sheet = ss.insertSheet(name);
+  return sheet;
+}
+
+function setHeaders(sheet, headers, bgColor, fontColor) {
+  var range = sheet.getRange(1, 1, 1, headers.length);
+  range.setValues([headers])
+       .setBackground(bgColor || '#1a1a2e')
+       .setFontColor(fontColor || '#ffffff')
+       .setFontWeight('bold')
+       .setFrozenRows && sheet.setFrozenRows(1);
+  sheet.setFrozenRows(1);
+  for (var i = 0; i < headers.length; i++) {
+    sheet.setColumnWidth(i + 1, Math.max(headers[i].length * 8 + 20, 100));
+  }
+}
+
+function setColumnWidths(sheet, widths) {
+  for (var i = 0; i < widths.length; i++) {
+    sheet.setColumnWidth(i + 1, widths[i]);
+  }
+}
+
+// Add menu on open
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('🔧 Voice Agent Setup')
+    .addItem('Run Full Setup (first time only)', 'setupEverything')
+    .addToUi();
+}

@@ -1,0 +1,249 @@
+/**
+ * responseLibrary.ts — High Tier Only
+ * Manages approved responses, objection handling, winning phrases,
+ * and AI improvement suggestions for outbound campaigns.
+ */
+
+import OpenAI from 'openai';
+import { readSheetTab, appendToSheet } from './googleSheets';
+import { generateId } from './utils';
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// ── Interfaces ─────────────────────────────────────────────────────────────────
+
+export interface ResponseLibraryEntry {
+  response_id: string;
+  campaign_type: string;
+  context: string;          // "opener" | "follow_up" | "closing" | "voicemail"
+  response_text: string;
+  approved: boolean;
+  performance_notes: string;
+  date_added: string;
+}
+
+export interface ObjectionBankEntry {
+  objection_id: string;
+  objection_type: string;
+  objection_text: string;
+  approved_response: string;
+  approved: boolean;
+  success_rate: string;
+  notes: string;
+}
+
+export interface WinningPhrase {
+  phrase_id: string;
+  campaign_type: string;
+  phrase: string;
+  context: string;
+  approved: boolean;
+  notes: string;
+}
+
+export interface AISuggestion {
+  suggestion_id: string;
+  call_id: string;
+  business_id: string;
+  suggestion_type: 'script' | 'faq' | 'objection' | 'opener' | 'phrase';
+  suggestion_text: string;
+  reasoning: string;
+  approved: boolean;
+  created_at: string;
+}
+
+// ── Response Library ──────────────────────────────────────────────────────────
+
+/**
+ * Get all approved responses for a given campaign type.
+ * Filters Response Library tab where approved = TRUE.
+ */
+export async function getApprovedResponses(
+  sheetId: string,
+  campaignType: string
+): Promise<ResponseLibraryEntry[]> {
+  try {
+    const rows = await readSheetTab(sheetId, 'Response Library');
+    return (rows ?? []).slice(1)
+      .filter(row => row[6] === 'TRUE' && (row[1] === campaignType || row[1] === 'all'))
+      .map(row => ({
+        response_id:       row[0],
+        campaign_type:     row[1],
+        context:           row[2],
+        response_text:     row[3],
+        approved:          row[6] === 'TRUE',
+        performance_notes: row[4] ?? '',
+        date_added:        row[5] ?? '',
+      }));
+  } catch {
+    return [];
+  }
+}
+
+// ── Objection Bank ────────────────────────────────────────────────────────────
+
+/**
+ * Get all approved objection responses.
+ * Filters Objection Bank tab where approved = TRUE.
+ */
+export async function getApprovedObjectionResponses(
+  sheetId: string
+): Promise<ObjectionBankEntry[]> {
+  try {
+    const rows = await readSheetTab(sheetId, 'Objection Bank');
+    return (rows ?? []).slice(1)
+      .filter(row => row[4] === 'TRUE')
+      .map(row => ({
+        objection_id:      row[0],
+        objection_type:    row[1],
+        objection_text:    row[2],
+        approved_response: row[3],
+        approved:          true,
+        success_rate:      row[5] ?? '',
+        notes:             row[6] ?? '',
+      }));
+  } catch {
+    return [];
+  }
+}
+
+// ── Winning Phrases ───────────────────────────────────────────────────────────
+
+/**
+ * Get all approved winning phrases for a given campaign type.
+ */
+export async function getWinningPhrases(
+  sheetId: string,
+  campaignType: string
+): Promise<WinningPhrase[]> {
+  try {
+    const rows = await readSheetTab(sheetId, 'Winning Phrases');
+    return (rows ?? []).slice(1)
+      .filter(row => row[4] === 'TRUE' && (row[1] === campaignType || row[1] === 'all'))
+      .map(row => ({
+        phrase_id:    row[0],
+        campaign_type: row[1],
+        phrase:       row[2],
+        context:      row[3],
+        approved:     true,
+        notes:        row[5] ?? '',
+      }));
+  } catch {
+    return [];
+  }
+}
+
+// ── AI Improvement Suggestions ────────────────────────────────────────────────
+
+/**
+ * Generate AI improvement suggestions based on call quality and outcome.
+ * Writes suggestions to AI Improvement Suggestions tab with approved = FALSE.
+ * A human must manually set approved = TRUE before suggestions are used.
+ *
+ * Columns: suggestion_id | call_id | business_id | suggestion_type |
+ *          suggestion_text | reasoning | approved | created_at
+ */
+export async function suggestImprovements(
+  callData: { callId: string; businessId: string; callOutcome: string; transcript: string; campaignType?: string },
+  qualityScore: { overall_score: number; issues_detected: string[]; recommended_fix: string },
+  sheetId: string
+): Promise<void> {
+  if (qualityScore.overall_score >= 85) {
+    // High-quality call — no suggestions needed
+    return;
+  }
+
+  const prompt = `
+You are analyzing an AI receptionist call that scored ${qualityScore.overall_score}/100.
+
+Issues detected: ${qualityScore.issues_detected.join('; ')}
+Recommended fix from scoring: ${qualityScore.recommended_fix}
+Call outcome: ${callData.callOutcome}
+Campaign type: ${callData.campaignType || 'inbound'}
+
+Generate 1-2 specific improvement suggestions. Return JSON array:
+[
+  {
+    "type": "script" | "faq" | "objection" | "opener" | "phrase",
+    "suggestion": "The exact new text or instruction to add",
+    "reasoning": "Why this would improve the score"
+  }
+]
+
+Be concrete. Suggest actual text, not vague guidance.
+`;
+
+  let suggestions: Array<{ type: string; suggestion: string; reasoning: string }> = [];
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a call quality optimization expert. Return only valid JSON arrays.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.4,
+    });
+
+    const raw = response.choices[0]?.message?.content ?? '[]';
+    suggestions = JSON.parse(raw);
+  } catch {
+    suggestions = [{
+      type: 'script',
+      suggestion: qualityScore.recommended_fix,
+      reasoning: `Auto-generated from quality score issues: ${qualityScore.issues_detected.join(', ')}`,
+    }];
+  }
+
+  // Write each suggestion to the sheet (approved = FALSE by default)
+  for (const s of suggestions) {
+    const row: (string | boolean)[] = [
+      generateId('SUG'),
+      callData.callId,
+      callData.businessId,
+      s.type,
+      s.suggestion,
+      s.reasoning,
+      false,          // approved = FALSE — must be manually approved
+      new Date().toISOString(),
+    ];
+
+    await appendToSheet(sheetId, 'AI Improvement Suggestions', row);
+  }
+
+  console.log(`[responseLibrary] Generated ${suggestions.length} improvement suggestion(s) for call ${callData.callId}`);
+}
+
+/**
+ * Build a formatted block of approved responses for injection into the agent prompt.
+ */
+export function formatResponsesForPrompt(
+  responses: ResponseLibraryEntry[],
+  objections: ObjectionBankEntry[],
+  phrases: WinningPhrase[]
+): string {
+  const lines: string[] = [];
+
+  if (responses.length > 0) {
+    lines.push('APPROVED RESPONSES:');
+    for (const r of responses) {
+      lines.push(`  [${r.context.toUpperCase()}] ${r.response_text}`);
+    }
+  }
+
+  if (objections.length > 0) {
+    lines.push('\nAPPROVED OBJECTION RESPONSES:');
+    for (const o of objections) {
+      lines.push(`  [${o.objection_type}] ${o.approved_response}`);
+    }
+  }
+
+  if (phrases.length > 0) {
+    lines.push('\nWINNING PHRASES:');
+    for (const p of phrases) {
+      lines.push(`  [${p.context}] "${p.phrase}"`);
+    }
+  }
+
+  return lines.join('\n') || 'No approved responses loaded for this campaign.';
+}
