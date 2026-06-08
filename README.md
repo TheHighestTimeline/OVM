@@ -1,317 +1,219 @@
-import React, { useState } from 'react';
+/**
+ * monthlyReporter.ts — Medium / High Tier
+ * Generates monthly optimization reports for each qualifying client.
+ */
 
-import Button from '../../../components/ui/Button';
-import Input from '../../../components/ui/Input';
-import Select from '../../../components/ui/Select';
-import { Checkbox } from '../../../components/ui/Checkbox';
+import { readSheetTab, appendToSheet } from './googleSheets';
+import OpenAI from 'openai';
+import { average, topN, generateId } from './utils';
 
-const TranslationSettingsPanel = () => {
-  const [settings, setSettings] = useState({
-    primaryLanguage: 'en',
-    secondaryLanguage: 'es',
-    accuracyThreshold: 85,
-    enableRealTimeCorrection: true,
-    enableContextualTranslation: true,
-    enableLegalTerminology: true,
-    customDictionaryEnabled: true,
-    autoDetectLanguage: false,
-    confidenceDisplay: true
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export interface ClientConfig {
+  businessId: string;
+  businessName: string;
+  ownerEmail: string;
+  googleSheetId: string;
+  tier: 'low' | 'medium' | 'high';
+  monthlyOptimizationReports: boolean;
+}
+
+export interface MonthlyReport {
+  report_id: string;
+  month: string;                    // e.g. "2026-04"
+  business_id: string;
+  total_calls: number;
+  total_leads: number;
+  average_lead_score: number;
+  average_quality_score: number;
+  top_services_requested: string;
+  common_questions: string;
+  common_failure_points: string;
+  recommended_faq_updates: string;
+  recommended_script_updates: string;
+  recommended_calendly_updates: string;
+  notes: string;
+}
+
+/**
+ * Generate a full monthly optimization report for a client.
+ * Uses GPT-4o-mini to produce actionable recommendations.
+ */
+export async function generateMonthlyReport(client: ClientConfig): Promise<MonthlyReport> {
+  const month     = getPreviousMonth();
+  const calls     = await getMonthCalls(client.googleSheetId, month);
+  const qualScores = await getMonthQualityScores(client.googleSheetId);
+  const lostLeads = await getMonthLostLeads(client.googleSheetId);
+
+  const totalCalls        = calls.length;
+  const totalLeads        = calls.filter(c => c[8] !== 'Spam / Vendor' && c[8] !== 'Wrong Number').length;
+  const avgLeadScore      = average(calls.map(c => parseInt(c[9] ?? '0', 10)));
+  const avgQualityScore   = average(qualScores.map(s => parseInt(s[16] ?? '0', 10)));
+  const topServices       = topN(calls.map(c => c[4]).filter(Boolean), 5);
+  const failurePoints     = analyzeFailurePoints(calls, lostLeads);
+
+  // Use AI to generate optimization recommendations
+  const recommendations = await generateAIRecommendations({
+    totalCalls, totalLeads, avgLeadScore, avgQualityScore,
+    topServices, failurePoints, month, businessName: client.businessName,
   });
 
-  const [customTerms, setCustomTerms] = useState([
-    { id: 1, english: 'Power of Attorney', spanish: 'Poder Notarial', category: 'Legal Documents' },
-    { id: 2, english: 'Deposition', spanish: 'Declaración Jurada', category: 'Court Proceedings' },
-    { id: 3, english: 'Retainer Agreement', spanish: 'Acuerdo de Honorarios', category: 'Contracts' },
-    { id: 4, english: 'Statute of Limitations', spanish: 'Prescripción Legal', category: 'Legal Concepts' },
-    { id: 5, english: 'Plaintiff', spanish: 'Demandante', category: 'Court Parties' }
-  ]);
+  return {
+    report_id:                    generateId('MR'),
+    month,
+    business_id:                  client.businessId,
+    total_calls:                  totalCalls,
+    total_leads:                  totalLeads,
+    average_lead_score:           Math.round(avgLeadScore * 10) / 10,
+    average_quality_score:        Math.round(avgQualityScore * 10) / 10,
+    top_services_requested:       topServices.join(', '),
+    common_questions:             recommendations.commonQuestions,
+    common_failure_points:        failurePoints.join('; '),
+    recommended_faq_updates:      recommendations.faqUpdates,
+    recommended_script_updates:   recommendations.scriptUpdates,
+    recommended_calendly_updates: recommendations.calendlyUpdates,
+    notes:                        recommendations.notes,
+  };
+}
 
-  const [showAddTermModal, setShowAddTermModal] = useState(false);
-  const [newTerm, setNewTerm] = useState({ english: '', spanish: '', category: '' });
-
-  const languageOptions = [
-    { value: 'en', label: 'English' },
-    { value: 'es', label: 'Spanish (Español)' },
-    { value: 'fr', label: 'French (Français)' },
-    { value: 'de', label: 'German (Deutsch)' },
-    { value: 'pt', label: 'Portuguese (Português)' }
+/**
+ * Write monthly report to the Monthly Optimization Reports tab.
+ * Columns: report_id | month | business_id | total_calls | total_leads |
+ *          average_lead_score | average_quality_score | top_services_requested |
+ *          common_questions | common_failure_points | recommended_faq_updates |
+ *          recommended_script_updates | recommended_calendly_updates | notes
+ */
+export async function saveMonthlyReportToSheet(
+  sheetId: string,
+  report: MonthlyReport
+): Promise<void> {
+  const row = [
+    report.report_id,
+    report.month,
+    report.business_id,
+    report.total_calls,
+    report.total_leads,
+    report.average_lead_score,
+    report.average_quality_score,
+    report.top_services_requested,
+    report.common_questions,
+    report.common_failure_points,
+    report.recommended_faq_updates,
+    report.recommended_script_updates,
+    report.recommended_calendly_updates,
+    report.notes,
   ];
 
-  const categoryOptions = [
-    { value: 'Legal Documents', label: 'Legal Documents' },
-    { value: 'Court Proceedings', label: 'Court Proceedings' },
-    { value: 'Contracts', label: 'Contracts' },
-    { value: 'Legal Concepts', label: 'Legal Concepts' },
-    { value: 'Court Parties', label: 'Court Parties' },
-    { value: 'General', label: 'General' }
-  ];
+  await appendToSheet(sheetId, 'Monthly Optimization Reports', row);
+  console.log(`[monthlyReporter] Saved monthly report ${report.report_id} for ${report.month}`);
+}
 
-  const handleSettingChange = (key, value) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
-  };
+// ── Internal helpers ──────────────────────────────────────────────────────────
 
-  const handleAddTerm = () => {
-    if (newTerm.english && newTerm.spanish && newTerm.category) {
-      setCustomTerms(prev => [...prev, {
-        id: Date.now(),
-        ...newTerm
-      }]);
-      setNewTerm({ english: '', spanish: '', category: '' });
-      setShowAddTermModal(false);
-    }
-  };
+async function getMonthCalls(sheetId: string, month: string): Promise<string[][]> {
+  const rows = await readSheetTab(sheetId, 'Call Log');
+  return (rows ?? []).slice(1).filter(row => {
+    const d = new Date(row[3]);
+    if (isNaN(d.getTime())) return false;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === month;
+  });
+}
 
-  const handleDeleteTerm = (id) => {
-    setCustomTerms(prev => prev.filter(term => term.id !== id));
-  };
+async function getMonthQualityScores(sheetId: string): Promise<string[][]> {
+  try {
+    return ((await readSheetTab(sheetId, 'AI Quality Scores')) ?? []).slice(1);
+  } catch { return []; }
+}
 
-  const handleExportDictionary = () => {
-    const dataStr = JSON.stringify(customTerms, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const exportFileDefaultName = 'legal-dictionary.json';
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-  };
+async function getMonthLostLeads(sheetId: string): Promise<string[][]> {
+  try {
+    return ((await readSheetTab(sheetId, 'Lost Lead Alerts')) ?? []).slice(1);
+  } catch { return []; }
+}
 
-  return (
-    <div className="space-y-8">
-      {/* Language Configuration */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">Language Configuration</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Select
-            label="Primary Language"
-            description="Main language for the interface"
-            options={languageOptions}
-            value={settings.primaryLanguage}
-            onChange={(value) => handleSettingChange('primaryLanguage', value)}
-          />
-          <Select
-            label="Secondary Language"
-            description="Target translation language"
-            options={languageOptions}
-            value={settings.secondaryLanguage}
-            onChange={(value) => handleSettingChange('secondaryLanguage', value)}
-          />
-        </div>
-        <div className="mt-6">
-          <Checkbox
-            label="Enable automatic language detection"
-            description="Automatically detect caller's language"
-            checked={settings.autoDetectLanguage}
-            onChange={(e) => handleSettingChange('autoDetectLanguage', e.target.checked)}
-          />
-        </div>
-      </div>
+function analyzeFailurePoints(calls: string[][], lostLeads: string[][]): string[] {
+  const points: string[] = [];
 
-      {/* Translation Quality */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">Translation Quality</h3>
-        <div className="space-y-6">
-          <div>
-            <Input
-              label="Accuracy Threshold (%)"
-              type="number"
-              min="50"
-              max="100"
-              value={settings.accuracyThreshold}
-              onChange={(e) => handleSettingChange('accuracyThreshold', parseInt(e.target.value))}
-              description="Minimum confidence level for translations"
-            />
-            <div className="mt-2 bg-muted rounded-lg p-3">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Low Quality</span>
-                <span>High Quality</span>
-              </div>
-              <div className="w-full bg-border rounded-full h-2 mt-1">
-                <div 
-                  className="bg-primary h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${settings.accuracyThreshold}%` }}
-                ></div>
-              </div>
-            </div>
-          </div>
+  const incompleteRate = calls.filter(c => c[8] === 'Incomplete Call').length / Math.max(calls.length, 1);
+  if (incompleteRate > 0.10) points.push(`High incomplete call rate (${(incompleteRate * 100).toFixed(0)}%)`);
 
-          <div className="space-y-4">
-            <Checkbox
-              label="Enable real-time correction"
-              description="Automatically correct translation errors during conversation"
-              checked={settings.enableRealTimeCorrection}
-              onChange={(e) => handleSettingChange('enableRealTimeCorrection', e.target.checked)}
-            />
-            <Checkbox
-              label="Enable contextual translation"
-              description="Use conversation context to improve translation accuracy"
-              checked={settings.enableContextualTranslation}
-              onChange={(e) => handleSettingChange('enableContextualTranslation', e.target.checked)}
-            />
-            <Checkbox
-              label="Enable legal terminology mode"
-              description="Prioritize legal terms and phrases in translations"
-              checked={settings.enableLegalTerminology}
-              onChange={(e) => handleSettingChange('enableLegalTerminology', e.target.checked)}
-            />
-            <Checkbox
-              label="Show confidence scores"
-              description="Display translation confidence levels to users"
-              checked={settings.confidenceDisplay}
-              onChange={(e) => handleSettingChange('confidenceDisplay', e.target.checked)}
-            />
-          </div>
-        </div>
-      </div>
+  const lostRate = lostLeads.length / Math.max(calls.length, 1);
+  if (lostRate > 0.12) points.push(`Elevated lost lead rate (${(lostRate * 100).toFixed(0)}%)`);
 
-      {/* Custom Dictionary */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-foreground">Custom Legal Dictionary</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Manage specialized legal terms for accurate translations
-            </p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <Button
-              variant="outline"
-              size="sm"
-              iconName="Download"
-              iconPosition="left"
-              onClick={handleExportDictionary}
-            >
-              Export
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              iconName="Upload"
-              iconPosition="left"
-            >
-              Import
-            </Button>
-            <Button
-              variant="default"
-              size="sm"
-              iconName="Plus"
-              iconPosition="left"
-              onClick={() => setShowAddTermModal(true)}
-            >
-              Add Term
-            </Button>
-          </div>
-        </div>
+  const calendlyRate = calls.filter(c => c[12] === 'TRUE').length / Math.max(calls.length, 1);
+  if (calendlyRate < 0.20) points.push('Low Calendly offer/acceptance rate');
 
-        <div className="mb-4">
-          <Checkbox
-            label="Enable custom dictionary"
-            description="Use custom legal terms during translation"
-            checked={settings.customDictionaryEnabled}
-            onChange={(e) => handleSettingChange('customDictionaryEnabled', e.target.checked)}
-          />
-        </div>
+  return points.length > 0 ? points : ['No significant failure points detected'];
+}
 
-        <div className="overflow-hidden border border-border rounded-lg">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-muted">
-                <tr>
-                  <th className="text-left p-3 text-sm font-medium text-foreground">English Term</th>
-                  <th className="text-left p-3 text-sm font-medium text-foreground">Spanish Translation</th>
-                  <th className="text-left p-3 text-sm font-medium text-foreground">Category</th>
-                  <th className="text-right p-3 text-sm font-medium text-foreground">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {customTerms.map((term) => (
-                  <tr key={term.id} className="border-t border-border">
-                    <td className="p-3 text-sm text-foreground font-medium">{term.english}</td>
-                    <td className="p-3 text-sm text-foreground">{term.spanish}</td>
-                    <td className="p-3">
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                        {term.category}
-                      </span>
-                    </td>
-                    <td className="p-3 text-right">
-                      <div className="flex items-center justify-end space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          iconName="Edit"
-                          onClick={() => console.log('Edit term:', term.id)}
-                        />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          iconName="Trash2"
-                          onClick={() => handleDeleteTerm(term.id)}
-                          className="text-error hover:text-error"
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+interface AIRecommendationInput {
+  totalCalls: number;
+  totalLeads: number;
+  avgLeadScore: number;
+  avgQualityScore: number;
+  topServices: string[];
+  failurePoints: string[];
+  month: string;
+  businessName: string;
+}
 
-      {/* Add Term Modal */}
-      {showAddTermModal && (
-        <div className="fixed inset-0 z-modal bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-border rounded-lg shadow-floating w-full max-w-md">
-            <div className="flex items-center justify-between p-6 border-b border-border">
-              <h3 className="text-lg font-semibold text-foreground">Add Legal Term</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                iconName="X"
-                onClick={() => setShowAddTermModal(false)}
-              />
-            </div>
-            <div className="p-6 space-y-4">
-              <Input
-                label="English Term"
-                placeholder="Enter English legal term"
-                value={newTerm.english}
-                onChange={(e) => setNewTerm(prev => ({ ...prev, english: e.target.value }))}
-              />
-              <Input
-                label="Spanish Translation"
-                placeholder="Enter Spanish translation"
-                value={newTerm.spanish}
-                onChange={(e) => setNewTerm(prev => ({ ...prev, spanish: e.target.value }))}
-              />
-              <Select
-                label="Category"
-                placeholder="Select category"
-                options={categoryOptions}
-                value={newTerm.category}
-                onChange={(value) => setNewTerm(prev => ({ ...prev, category: value }))}
-              />
-            </div>
-            <div className="flex items-center justify-end space-x-3 p-6 border-t border-border">
-              <Button
-                variant="outline"
-                onClick={() => setShowAddTermModal(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="default"
-                onClick={handleAddTerm}
-                disabled={!newTerm.english || !newTerm.spanish || !newTerm.category}
-              >
-                Add Term
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+interface AIRecommendations {
+  commonQuestions: string;
+  faqUpdates: string;
+  scriptUpdates: string;
+  calendlyUpdates: string;
+  notes: string;
+}
 
-export default TranslationSettingsPanel;
+async function generateAIRecommendations(data: AIRecommendationInput): Promise<AIRecommendations> {
+  const prompt = `
+You are analyzing AI receptionist performance for ${data.businessName} for month ${data.month}.
+
+DATA:
+- Total calls: ${data.totalCalls}
+- Total leads: ${data.totalLeads}  
+- Avg lead score: ${data.avgLeadScore.toFixed(1)}/100
+- Avg quality score: ${data.avgQualityScore.toFixed(1)}/100
+- Top services: ${data.topServices.join(', ')}
+- Failure points: ${data.failurePoints.join('; ')}
+
+Provide JSON with these fields:
+{
+  "commonQuestions": "Top 3 questions callers asked this month (inferred from service types)",
+  "faqUpdates": "Specific FAQ additions or updates recommended",
+  "scriptUpdates": "Specific AI script improvements recommended",
+  "calendlyUpdates": "Specific Calendly link or service-specific link recommendations",
+  "notes": "1-2 sentence executive summary"
+}
+
+Be specific and actionable. No generic advice.
+`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a business optimization analyst. Return only valid JSON.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.3,
+      response_format: { type: 'json_object' },
+    });
+
+    return JSON.parse(response.choices[0]?.message?.content ?? '{}');
+  } catch {
+    return {
+      commonQuestions: 'Unable to generate — check API key',
+      faqUpdates: 'Review call transcripts manually',
+      scriptUpdates: 'Review quality scores for lowest-performing calls',
+      calendlyUpdates: 'Ensure service-specific links are configured',
+      notes: `Month ${data.month}: ${data.totalCalls} calls, ${data.totalLeads} leads, avg score ${data.avgLeadScore.toFixed(0)}.`,
+    };
+  }
+}
+
+function getPreviousMonth(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}

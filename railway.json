@@ -1,0 +1,160 @@
+/**
+ * lostLeadDetector.ts — Medium / High Tier
+ * Detects and logs at-risk or lost leads after every call.
+ */
+
+import { appendToSheet } from './googleSheets';
+import { generateId } from './utils';
+
+export interface CallData {
+  callId: string;
+  businessId: string;
+  callerName: string;
+  callerPhone: string;
+  serviceRequested: string;
+  callerIntent: string;
+  callOutcome: string;
+  leadScore: number;
+  leadPriority: string;
+  urgency: string;
+  appointmentRequested: boolean;
+  calendlyLinkSent: boolean;
+  callbackNeeded: boolean;
+}
+
+export interface LostLeadAlert {
+  alertId: string;
+  callId: string;
+  businessId: string;
+  callerName: string;
+  callerPhone: string;
+  serviceRequested: string;
+  reasonLostOrAtRisk: string;
+  leadScore: number;
+  recommendedNextAction: string;
+  alertSent: boolean;
+  alertDate: string;
+}
+
+/**
+ * Evaluate a completed call and return a LostLeadAlert if the lead is at risk.
+ * Returns null if the lead is not at risk.
+ */
+export function detectLostLead(callData: CallData): LostLeadAlert | null {
+  const reasons: string[] = [];
+
+  // Rule 1: High-score lead left without booking
+  if (
+    callData.leadScore >= 60 &&
+    !callData.appointmentRequested &&
+    !callData.calendlyLinkSent
+  ) {
+    reasons.push('High-score lead left without booking');
+  }
+
+  // Rule 2: Asked for pricing but did not convert
+  if (
+    callData.callerIntent?.includes('price') &&
+    callData.callOutcome === 'Pricing Question'
+  ) {
+    reasons.push('Asked for pricing but did not convert');
+  }
+
+  // Rule 3: Urgent lead with callback only
+  if (
+    callData.callbackNeeded &&
+    (callData.leadPriority === 'Urgent' || callData.urgency === 'Urgent')
+  ) {
+    reasons.push('Urgent lead marked callback only — no booking confirmed');
+  }
+
+  // Rule 4: Promising caller dropped before completion
+  if (
+    callData.callOutcome === 'Incomplete Call' &&
+    callData.leadScore >= 40
+  ) {
+    reasons.push('Promising caller disconnected before completion');
+  }
+
+  // Rule 5: High intent but explicit "think about it"
+  if (
+    callData.callOutcome === 'Not Interested' &&
+    callData.leadScore >= 50
+  ) {
+    reasons.push('High-score lead marked not interested — may be recoverable');
+  }
+
+  // Rule 6: Calendly sent but not confirmed booked (medium-high risk)
+  if (
+    callData.calendlyLinkSent &&
+    !callData.appointmentRequested &&
+    callData.leadScore >= 55
+  ) {
+    reasons.push('Calendly link sent but booking not confirmed on call');
+  }
+
+  if (reasons.length === 0) return null;
+
+  return {
+    alertId:              generateId('LA'),
+    callId:               callData.callId,
+    businessId:           callData.businessId,
+    callerName:           callData.callerName,
+    callerPhone:          callData.callerPhone,
+    serviceRequested:     callData.serviceRequested,
+    reasonLostOrAtRisk:   reasons.join('; '),
+    leadScore:            callData.leadScore,
+    recommendedNextAction: getRecommendedAction(callData, reasons),
+    alertSent:            false,
+    alertDate:            new Date().toISOString(),
+  };
+}
+
+/**
+ * Write a lost lead alert to the Lost Lead Alerts tab.
+ * Columns: alert_id | call_id | business_id | caller_name | caller_phone |
+ *          service_requested | reason_lost_or_at_risk | lead_score |
+ *          recommended_next_action | alert_sent | alert_date
+ */
+export async function saveLostLeadAlert(
+  sheetId: string,
+  alert: LostLeadAlert
+): Promise<void> {
+  const row = [
+    alert.alertId,
+    alert.callId,
+    alert.businessId,
+    alert.callerName,
+    alert.callerPhone,
+    alert.serviceRequested,
+    alert.reasonLostOrAtRisk,
+    alert.leadScore,
+    alert.recommendedNextAction,
+    alert.alertSent,
+    alert.alertDate,
+  ];
+
+  await appendToSheet(sheetId, 'Lost Lead Alerts', row);
+  console.log(`[lostLeadDetector] Alert saved: ${alert.alertId} for ${alert.callerName}`);
+}
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+function getRecommendedAction(callData: CallData, reasons: string[]): string {
+  if (callData.urgency === 'Urgent' || callData.urgency === 'Emergency') {
+    return 'Call back within 1 hour — urgent lead';
+  }
+  if (callData.calendlyLinkSent) {
+    return 'Send follow-up SMS in 24 hours if not booked';
+  }
+  if (reasons.some(r => r.includes('pricing'))) {
+    return 'Have team follow up with a personalized quote';
+  }
+  if (callData.leadScore >= 70) {
+    return 'Priority call back within 2 hours';
+  }
+  if (callData.callOutcome === 'Incomplete Call') {
+    return 'Attempt callback within 30 minutes';
+  }
+  return 'Follow up within 24 hours by phone or SMS';
+}

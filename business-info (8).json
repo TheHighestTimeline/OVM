@@ -1,0 +1,450 @@
+# High Tier (Sales) — Google Sheets Workbook Template
+
+**Who this is for:** Sales 500 / Sales 1000 / Sales 1500 clients  
+**Total tabs:** 36  
+**Builds on:** All 21 Medium Tier tabs, plus 15 additions below  
+**Permission model:** Strictly enforced — see full permission table at bottom
+
+---
+
+## HOW TO SET UP
+
+1. Make a copy of the **High Tier Master Template** spreadsheet.
+2. Rename: `[Business Name] — Voice Agent (Sales)`
+3. Share with Google Service Account email: **Editor** access.
+4. Paste Sheet ID into Master Backend Sheet → Client Roster.
+5. Set `outbound_enabled = TRUE`, `outbound_mode = manual` in Master Backend Sheet.
+6. Fill in Business / Campaign Inputs tab with at least one campaign opener.
+7. Install the Apps Script (see APPS_SCRIPT_SUBMIT_LEAD.js).
+8. Test with one manual outbound lead before going live at scale.
+
+---
+
+## TABS 1–21: INHERITED FROM MEDIUM TIER
+
+All 21 Medium Tier tabs included. High tier adds these fields to Call Log:
+
+### Call Log — Additional Columns (High Tier only)
+
+| Col | Field |
+|-----|-------|
+| AC | direction (inbound / outbound) |
+| AD | campaign_type |
+| AE | lead_id (links to Outbound Queue) |
+
+---
+
+## TAB 22: Submit Outbound Lead
+
+**Client-editable form.** Client fills this out to queue a single outbound lead.  
+The green "Submit Lead" button triggers the Apps Script to validate and write to Outbound Queue.
+
+### Cell Layout
+
+| Cell | Label | Field | Required |
+|------|-------|-------|----------|
+| A3 | Lead Name | B3 | ✅ |
+| A4 | Phone Number | B4 | ✅ |
+| A5 | Email Address | B5 | |
+| A6 | Campaign Type | B6 | ✅ (dropdown) |
+| A7 | Service Interest | B7 | |
+| A8 | Desired Outcome | B8 | ✅ |
+| A9 | Relationship Type | B9 | ✅ (dropdown) |
+| A10 | Consent Status | B10 | ✅ (dropdown) |
+| A11 | Consent Source | B11 | |
+| A12 | Last Interaction Date | B12 | |
+| A13 | Preferred Call Window | B13 | (e.g., "Mornings", "After 5pm") |
+| A14 | Notes | B14 | |
+| A15 | Client Attestation ✅ | B15 | ✅ (checkbox — must be TRUE) |
+
+### Dropdown Values
+
+**Campaign Type (B6):**
+- missed_call_recovery
+- inbound_lead_followup
+- quote_followup
+- calendly_not_booked
+- appointment_confirmation
+- no_show_recovery
+- review_request
+- existing_customer_reactivation
+
+**Relationship Type (B9):**
+- Missed Caller
+- Inbound Lead
+- Website Form Lead
+- Text/Email Responded
+- Quote Request
+- Existing Customer
+- Past Customer
+- No-Show
+- Appointment Holder
+- Review Request
+- Referral With Permission
+- Manual Review Approved
+
+**Consent Status (B10):**
+- Approved
+- Prior Inquiry
+- Existing Customer
+- Appointment Related
+- Quote Requested
+- Manual Review Approved
+
+### Client Attestation Text (display in cell A15 or near checkbox):
+> "I certify that I have a legitimate, lawful basis to contact this individual.  
+> This is NOT a cold lead, scraped contact, or purchased list.  
+> I understand that misuse of this feature may result in account termination."
+
+### Submit Button
+- Label: "📞 Submit Lead"
+- Action: Runs `submitOutboundLead()` Apps Script function
+- Location: Somewhere visible near the form (B17 or nearby)
+
+---
+
+## TAB 23: Business / Campaign Inputs
+
+Client-editable. Defines campaign openers, questions, and context for outbound calls.
+
+| Col | Field | Example |
+|-----|-------|---------|
+| A | campaign_type | missed_call_recovery |
+| B | campaign_display_name | Missed Call Recovery |
+| C | approved_opener | "Hi [LEAD_NAME], I saw you called earlier and wanted to make sure we connected." |
+| D | approved_questions | "What were you hoping we could help with?\|Is this still something you need?" |
+| E | active_promotion | 10% off first service this month |
+| F | seasonal_note | Busy season — priority scheduling available |
+| G | max_attempts | 3 |
+| H | call_window_start | 09:00 |
+| I | call_window_end | 19:00 |
+| J | notes | |
+
+One row per campaign type. Opener and questions are injected into agent prompt at call time.
+
+---
+
+## TAB 24: Outbound Queue 🔒
+
+All queued outbound leads. Backend writes; client adds via Submit Outbound Lead form only.
+
+| Col | Field |
+|-----|-------|
+| A | lead_id |
+| B | lead_name |
+| C | phone_number |
+| D | email |
+| E | source |
+| F | campaign_type |
+| G | service_interest |
+| H | call_reason |
+| I | desired_outcome |
+| J | relationship_type |
+| K | consent_status |
+| L | consent_source |
+| M | last_interaction_date |
+| N | preferred_call_window |
+| O | call_window_start |
+| P | call_window_end |
+| Q | attempt_count |
+| R | max_attempts |
+| S | status (Ready / In Progress / Completed / Blocked / Opted Out / Booked / Error) |
+| T | priority (Normal / High / Urgent) |
+| U | opt_out (TRUE/FALSE) |
+| V | client_attestation (TRUE/FALSE) |
+| W | validation_status |
+| X | validation_notes |
+| Y | notes |
+| Z | lead_submitted_at |
+| AA | last_updated |
+
+**Status values:**
+- **Pending Validation** → Just submitted, not yet checked
+- **Ready** → Passed all 15 eligibility checks, ready to call
+- **Blocked** → Failed one or more checks (see validation_notes)
+- **In Progress** → Call currently active
+- **Completed** → Call finished — see Outbound Results for outcome
+- **Booked** → Appointment confirmed
+- **Opted Out** → Person asked to be removed — auto-added to DNC
+- **Error** → Technical failure during call placement
+
+---
+
+## TAB 25: Outbound Attempts 🔒
+
+Every call attempt (including no-answers and failed calls).
+
+| Col | Field |
+|-----|-------|
+| A | attempt_id |
+| B | lead_id |
+| C | business_id |
+| D | call_sid |
+| E | campaign_type |
+| F | lead_name |
+| G | lead_phone |
+| H | attempted_at |
+| I | status (Placed / No Answer / Failed / Answered) |
+| J | notes |
+
+---
+
+## TAB 26: Outbound Results 👁
+
+Outcomes of completed outbound calls.
+
+| Col | Field |
+|-----|-------|
+| A | result_id |
+| B | lead_id |
+| C | business_id |
+| D | call_sid |
+| E | campaign_type |
+| F | lead_name |
+| G | lead_phone |
+| H | call_date |
+| I | call_time |
+| J | outcome |
+| K | answered (TRUE/FALSE) |
+| L | booked (TRUE/FALSE) |
+| M | calendly_sent (TRUE/FALSE) |
+| N | callback_needed (TRUE/FALSE) |
+| O | human_followup_needed (TRUE/FALSE) |
+| P | opt_out_detected (TRUE/FALSE) |
+| Q | objection_detected (TRUE/FALSE) |
+| R | objection_type |
+| S | caller_sentiment |
+| T | summary |
+| U | next_action |
+| V | next_followup_date |
+| W | duration_seconds |
+
+---
+
+## TAB 27: Do Not Call / Opt-Outs 🔒
+
+Consolidated DNC list. Auto-populated when opt-out detected.  
+Client may add numbers manually. NEVER remove numbers without explicit consent.
+
+| Col | Field |
+|-----|-------|
+| A | dnc_id |
+| B | phone_number |
+| C | name |
+| D | campaign_type |
+| E | reason (Opt-Out on Call / Manual Add / Legal Request) |
+| F | added_date |
+| G | added_by |
+
+---
+
+## TAB 28: Response Library
+
+Approved call openers, follow-up lines, and closing scripts per campaign type.
+
+| Col | Field |
+|-----|-------|
+| A | response_id |
+| B | campaign_type |
+| C | context (opener / follow_up / closing / voicemail) |
+| D | response_text |
+| E | performance_notes |
+| F | date_added |
+| G | approved (TRUE/FALSE — MUST be TRUE to be used) |
+
+---
+
+## TAB 29: Objection Bank
+
+Approved responses for common caller objections.
+
+| Col | Field |
+|-----|-------|
+| A | objection_id |
+| B | objection_type |
+| C | objection_text (what the caller says) |
+| D | approved_response (what AI should say) |
+| E | approved (TRUE/FALSE) |
+| F | success_rate |
+| G | notes |
+
+---
+
+## TAB 30: Winning Phrases
+
+High-performing phrases approved for use in outbound calls.
+
+| Col | Field |
+|-----|-------|
+| A | phrase_id |
+| B | campaign_type |
+| C | phrase |
+| D | context (where to use it) |
+| E | approved (TRUE/FALSE) |
+| F | notes |
+
+---
+
+## TAB 31: Lost Reasons 👁
+
+Tracks why leads didn't convert. Populated from Outbound Results + inbound Lost Lead Alerts.
+
+| Col | Field |
+|-----|-------|
+| A | reason_id |
+| B | call_id or result_id |
+| C | lead_name |
+| D | campaign_type |
+| E | reason_category |
+| F | full_reason |
+| G | lead_score |
+| H | date |
+
+---
+
+## TAB 32: AI Improvement Suggestions
+
+AI-generated script and FAQ improvements. Must be approved before taking effect.
+
+| Col | Field |
+|-----|-------|
+| A | suggestion_id |
+| B | call_id |
+| C | business_id |
+| D | suggestion_type (script / faq / objection / opener / phrase) |
+| E | suggestion_text |
+| F | reasoning |
+| G | approved (FALSE by default — YOU set to TRUE to activate) |
+| H | created_at |
+
+**Workflow:**
+1. AI generates suggestion → `approved = FALSE`
+2. You review the suggestion in this tab
+3. If good: change `approved = TRUE` → AI uses it on next call
+4. If bad: leave as FALSE or delete the row
+
+---
+
+## TAB 33: Best Time To Call 🔒
+
+Analytics on which day/time windows produce the best outbound results.
+
+| Col | Field |
+|-----|-------|
+| A | day_of_week |
+| B | hour_block (e.g., "2PM–3PM") |
+| C | calls_attempted |
+| D | calls_answered |
+| E | answer_rate |
+| F | bookings |
+| G | booking_rate |
+| H | recommendation (⭐ Best / ✅ Good / ⚠️ Average / ❌ Avoid) |
+
+---
+
+## TAB 34: Campaign Analytics 🔒
+
+Performance summary per campaign type.
+
+| Col | Field |
+|-----|-------|
+| A | campaign_type |
+| B | calls_attempted |
+| C | calls_answered |
+| D | conversations_completed |
+| E | bookings |
+| F | calendly_links_sent |
+| G | callbacks_requested |
+| H | opt_outs |
+| I | answer_rate |
+| J | booking_rate |
+| K | top_objection |
+| L | top_question |
+| M | recommended_change |
+
+---
+
+## TAB 35: Outbound Usage 🔒
+
+Tracks monthly outbound call and minute consumption.
+
+| Col | Field |
+|-----|-------|
+| A | month |
+| B | outbound_calls_attempted |
+| C | outbound_calls_limit |
+| D | outbound_minutes_used |
+| E | outbound_minutes_limit |
+| F | outbound_overage_minutes |
+| G | estimated_outbound_overage_cost |
+
+---
+
+## TAB 36: Campaign Performance Reports 👁
+
+Monthly outbound campaign summary (generated with Monthly Optimization Report).
+
+| Col | Field |
+|-----|-------|
+| A | report_id |
+| B | month |
+| C | campaign_type |
+| D | total_attempts |
+| E | total_answered |
+| F | total_booked |
+| G | booking_rate |
+| H | opt_out_rate |
+| I | top_objection |
+| J | improvement_recommendation |
+| K | notes |
+
+---
+
+## PERMISSION MODEL — HIGH TIER
+
+| Tab | Client Can Edit | Client Can View | Backend Only |
+|-----|----------------|-----------------|--------------|
+| Business Info | ✅ | ✅ | |
+| FAQ List | ✅ | ✅ | |
+| Calendly Links | ✅ | ✅ | |
+| Dynamic Intake Rules | ✅ | ✅ | |
+| Staff Assignment Rules | ✅ | ✅ | |
+| Submit Outbound Lead | ✅ (form only) | ✅ | |
+| Business / Campaign Inputs | ✅ | ✅ | |
+| Response Library | ✅ | ✅ | |
+| Objection Bank | ✅ | ✅ | |
+| Winning Phrases | ✅ | ✅ | |
+| AI Improvement Suggestions | ✅ (approved col only) | ✅ | |
+| Call Log | | 👁 | 🔒 writes |
+| Recordings | | 👁 | 🔒 writes |
+| Lost Lead Alerts | ✅ (resolved col) | 👁 | 🔒 writes |
+| Outbound Results | | 👁 | 🔒 writes |
+| Weekly Reports | | 👁 | 🔒 writes |
+| Monthly Optimization Reports | | 👁 | 🔒 writes |
+| Campaign Performance Reports | | 👁 | 🔒 writes |
+| Outbound Queue | | 👁 (via form) | 🔒 writes |
+| Outbound Attempts | | | 🔒 |
+| AI Quality Scores | | | 🔒 |
+| Do Not Call / Opt-Outs | ✅ (manual adds) | ✅ | 🔒 writes |
+| Best Time To Call | | | 🔒 |
+| Campaign Analytics | | | 🔒 |
+| Outbound Usage | | | 🔒 |
+| SMS Log | | | 🔒 |
+| Error Log | | | 🔒 |
+
+---
+
+## GOING LIVE CHECKLIST — HIGH TIER
+
+- [ ] All Medium Tier checklist items completed
+- [ ] Business / Campaign Inputs tab — at least one campaign fully filled in
+- [ ] Apps Script installed and tested (Submit button works)
+- [ ] Submit Outbound Lead form dropdowns configured
+- [ ] `outbound_enabled = TRUE` in Master Backend Sheet
+- [ ] `outbound_mode = manual` (start here — don't start with scheduled)
+- [ ] Submit one test lead manually and verify it appears in Outbound Queue
+- [ ] Trigger POST /api/outbound/worker?manual=true and verify call is placed
+- [ ] Confirm Outbound Results and Campaign Analytics tabs populate
+- [ ] Do Not Call tab tested with a known opt-out
+- [ ] Best Time To Call tab begins populating
+- [ ] After 10+ successful manual calls: optionally switch to `outbound_mode = scheduled_every_30_minutes`

@@ -1,0 +1,196 @@
+/**
+ * qualityScorer.ts — Medium / High Tier
+ * Uses gpt-4o-mini to score every call against a structured rubric.
+ * Non-blocking — called asynchronously after call data is saved.
+ */
+
+import OpenAI from 'openai';
+import { appendToSheet } from './googleSheets';
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export interface CallData {
+  callId: string;
+  businessId: string;
+  callerName: string;
+  callerPhone: string;
+  callerIntent: string;
+  serviceRequested: string;
+  urgency: string;
+  callOutcome: string;
+  calendlyLinkSent: boolean;
+  humanHandoffNeeded: boolean;
+  isSpam: boolean;
+  leadScore: number;
+  aiSummary: string;
+}
+
+export interface QualityScore {
+  quality_score_id: string;
+  call_id: string;
+  business_id: string;
+  scored_at: string;
+  intent_identified: boolean;
+  name_collected: boolean;
+  phone_collected: boolean;
+  service_collected: boolean;
+  urgency_identified: boolean;
+  calendly_offered_correctly: boolean;
+  handoff_triggered_correctly: boolean;
+  spam_detected_correctly: boolean;
+  avoided_prohibited_answers: boolean;
+  kept_responses_concise: boolean;
+  outcome_classified_correctly: boolean;
+  summary_quality_score: number;   // 0–10
+  overall_score: number;           // 0–100
+  issues_detected: string[];
+  recommended_fix: string;
+  raw_scoring_response: string;
+}
+
+const QUALITY_RUBRIC = `
+You are a call quality analyst evaluating an AI receptionist. Score this call.
+
+Return a JSON object with EXACTLY these fields:
+
+{
+  "intent_identified": true/false,
+  "name_collected": true/false,
+  "phone_collected": true/false,
+  "service_collected": true/false,
+  "urgency_identified": true/false,
+  "calendly_offered_correctly": true/false,
+  "handoff_triggered_correctly": true/false,
+  "spam_detected_correctly": true/false,
+  "avoided_prohibited_answers": true/false,
+  "kept_responses_concise": true/false,
+  "outcome_classified_correctly": true/false,
+  "summary_quality_score": 0-10,
+  "overall_score": 0-100,
+  "issues_detected": ["issue 1", "issue 2"],
+  "recommended_fix": "One concrete improvement suggestion"
+}
+
+SCORING GUIDE:
+- intent_identified: Did AI label the caller's intent correctly?
+- name_collected: Was the caller's name obtained?
+- phone_collected: Was the callback number confirmed?
+- service_collected: Was the specific service identified?
+- urgency_identified: Was urgency level assessed?
+- calendly_offered_correctly: Was Calendly offered after collecting name+phone+service (not before)?
+- handoff_triggered_correctly: Was human handoff triggered when appropriate?
+- spam_detected_correctly: If spam, was it flagged? If not spam, was it correctly NOT flagged?
+- avoided_prohibited_answers: Did AI avoid answering questions outside the approved FAQ?
+- kept_responses_concise: Were responses 1-2 sentences? No rambling?
+- outcome_classified_correctly: Does callOutcome match what actually happened?
+- summary_quality_score: 0-10 for the quality of the AI-generated summary
+- overall_score: Weighted 0-100 overall quality score
+- issues_detected: List specific problems found (empty array if none)
+- recommended_fix: Single most impactful improvement
+
+Be strict and accurate. Do not inflate scores.
+`;
+
+/**
+ * Score a completed call using gpt-4o-mini.
+ */
+export async function scoreCallQuality(
+  callData: CallData,
+  transcript: string
+): Promise<QualityScore> {
+  const prompt = `
+CALL METADATA:
+  Call ID: ${callData.callId}
+  Caller Intent: ${callData.callerIntent}
+  Service Requested: ${callData.serviceRequested}
+  Urgency: ${callData.urgency}
+  Call Outcome: ${callData.callOutcome}
+  Calendly Link Sent: ${callData.calendlyLinkSent}
+  Human Handoff Needed: ${callData.humanHandoffNeeded}
+  Spam Flagged: ${callData.isSpam}
+  Lead Score: ${callData.leadScore}
+  AI Summary: ${callData.aiSummary}
+
+FULL TRANSCRIPT:
+${transcript}
+
+${QUALITY_RUBRIC}
+`;
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: 'You are a precise call quality evaluator. Return only valid JSON.' },
+      { role: 'user', content: prompt },
+    ],
+    temperature: 0.1,
+    response_format: { type: 'json_object' },
+  });
+
+  const raw = response.choices[0]?.message?.content ?? '{}';
+  const parsed = JSON.parse(raw);
+
+  const scoreId = `QS-${Date.now()}-${callData.callId}`;
+
+  return {
+    quality_score_id: scoreId,
+    call_id: callData.callId,
+    business_id: callData.businessId,
+    scored_at: new Date().toISOString(),
+    intent_identified:          parsed.intent_identified ?? false,
+    name_collected:             parsed.name_collected ?? false,
+    phone_collected:            parsed.phone_collected ?? false,
+    service_collected:          parsed.service_collected ?? false,
+    urgency_identified:         parsed.urgency_identified ?? false,
+    calendly_offered_correctly: parsed.calendly_offered_correctly ?? false,
+    handoff_triggered_correctly:parsed.handoff_triggered_correctly ?? false,
+    spam_detected_correctly:    parsed.spam_detected_correctly ?? false,
+    avoided_prohibited_answers: parsed.avoided_prohibited_answers ?? false,
+    kept_responses_concise:     parsed.kept_responses_concise ?? false,
+    outcome_classified_correctly:parsed.outcome_classified_correctly ?? false,
+    summary_quality_score:      parsed.summary_quality_score ?? 0,
+    overall_score:              parsed.overall_score ?? 0,
+    issues_detected:            parsed.issues_detected ?? [],
+    recommended_fix:            parsed.recommended_fix ?? '',
+    raw_scoring_response:       raw,
+  };
+}
+
+/**
+ * Save a quality score to the AI Quality Scores tab.
+ * Columns: quality_score_id | call_id | business_id | scored_at |
+ *          intent_identified | name_collected | phone_collected | service_collected |
+ *          urgency_identified | calendly_offered_correctly | handoff_triggered_correctly |
+ *          spam_detected_correctly | avoided_prohibited_answers | kept_responses_concise |
+ *          outcome_classified_correctly | summary_quality_score | overall_score |
+ *          issues_detected | recommended_fix
+ */
+export async function saveQualityScoreToSheet(
+  sheetId: string,
+  score: QualityScore
+): Promise<void> {
+  const row = [
+    score.quality_score_id,
+    score.call_id,
+    score.business_id,
+    score.scored_at,
+    score.intent_identified,
+    score.name_collected,
+    score.phone_collected,
+    score.service_collected,
+    score.urgency_identified,
+    score.calendly_offered_correctly,
+    score.handoff_triggered_correctly,
+    score.spam_detected_correctly,
+    score.avoided_prohibited_answers,
+    score.kept_responses_concise,
+    score.outcome_classified_correctly,
+    score.summary_quality_score,
+    score.overall_score,
+    score.issues_detected.join('; '),
+    score.recommended_fix,
+  ];
+
+  await appendToSheet(sheetId, 'AI Quality Scores', row);
+  console.log(`[qualityScorer] Saved score ${score.quality_score_id}: ${score.overall_score}/100`);
+}
