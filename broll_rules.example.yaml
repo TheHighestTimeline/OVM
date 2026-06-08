@@ -1,0 +1,56 @@
+"""
+Auto stock B-roll fetch (Pexels) -- used only for AUTO spans the LLM suggested
+that you didn't claim with a manual rule. Downloads into assets/.
+Keys come from config (read from .env). Portrait HD by default for social.
+"""
+import logging
+import requests
+
+import config
+
+log = logging.getLogger("asset_manager")
+
+
+def _download(url, dest):
+    try:
+        with requests.get(url, stream=True, timeout=60) as r:
+            r.raise_for_status()
+            with open(dest, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        log.info(f"Downloaded {dest}")
+        return str(dest)
+    except Exception as e:
+        log.error(f"Download failed for {url}: {e}")
+        return None
+
+
+def get_broll(keyword, orientation="portrait"):
+    """Fetch one stock clip for `keyword` from Pexels; return local path or None."""
+    key = config.get_keys()["pexels"]
+    if not key:
+        log.warning("No PEXELS_API_KEY set -- skipping auto B-roll for "
+                    f"'{keyword}'. (Add it in the web UI to enable auto B-roll.)")
+        return None
+    try:
+        resp = requests.get(
+            "https://api.pexels.com/videos/search",
+            headers={"Authorization": key},
+            params={"query": keyword, "per_page": 1, "orientation": orientation},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        videos = resp.json().get("videos", [])
+        if not videos:
+            log.warning(f"No stock B-roll found for '{keyword}'.")
+            return None
+        files = videos[0]["video_files"]
+        link = next((f["link"] for f in files if f.get("quality") == "hd"), files[0]["link"])
+        safe = keyword.replace(" ", "_")
+        dest = config.ASSET_DIR / f"broll_{safe}_{videos[0]['id']}.mp4"
+        if dest.exists():
+            return str(dest)
+        return _download(link, dest)
+    except Exception as e:
+        log.error(f"Pexels fetch failed for '{keyword}': {e}")
+        return None

@@ -1,0 +1,149 @@
+"""
+OVM Ad Engine -- orchestrator.
+
+Build order (each step proven before the next): transcription -> manual
+placement -> hybrid auto fallback -> captions -> render -> stems.
+
+Usable two ways:
+  CLI:  python main.py --input_video founder.mp4 --style hormozi
+  Web:  webapp.py calls run() directly.
+"""
+import os
+import argparse
+import logging
+from pathlib import Path
+
+import config
+import transcriber
+import placement
+import broll_library
+import llm_handler
+import asset_manager
+import captions
+import video_processor
+import stems_export
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+log = logging.getLogger("main")
+
+
+def _overlaps(a_start, a_end, b_start, b_end):
+    return a_start < b_end and b_start < a_end
+
+
+def _merge_placements(manual, auto_suggestions, settings):
+    """Manual rules win. Auto stock spans that collide with a manual span are dropped."""
+    merged = list(manual)
+    # approximate manual coverage (end may be None -> assume ~6s for collision test)
+    manual_spans = [(p["start"], p["end"] if p["end"] else p["start"] + 6) for p in manual]
+
+    for sug in auto_suggestions:
+        if any(_overlaps(sug["start"], sug["end"], ms, me) for ms, me in manual_spans):
+            continue
+        path = asset_manager.get_broll(sug["keyword"])
+        if not path:
+            continue
+        merged.append({
+            "clip_id": Path(path).stem,
+            "path": path,
+            "start": sug["start"],
+            "end": sug["end"],
+            "source": "auto",
+            "rule": sug,
+        })
+    merged.sort(key=lambda p: p["start"])
+    return merged
+
+
+def run(founder_path, settings=None, project_name=None):
+    """Full pipeline. Returns dict with output + stems paths (or {'error':...})."""
+    settings = settings or config.load_settings()
+    founder_path = str(founder_path)
+    project_name = project_name or Path(founder_path).stem
+    if not os.path.exists(founder_path):
+        return {"error": f"Video not found: {founder_path}"}
+
+    log.info("=== Step 1/6: Transcription (word-level) ===")
+    audio = transcriber.extract_audio(founder_path)
+    if not audio:
+        return {"error": "Could not extract audio from the video."}
+    transcript = transcriber.transcribe(audio, settings)
+    if not transcript or not transcript["words"]:
+        return {"error": "Transcription produced no words."}
+
+    log.info("=== Step 2/6: Manual B-roll placement (your rules) ===")
+    manual = placement.resolve(transcript, settings)
+    used_clip_ids = {p["clip_id"] for p in manual}
+
+    log.info("=== Step 3/6: Hybrid B-roll (LLM places your clips, then stock fills gaps) ===")
+    # 3a. Let the LLM place YOUR OWN clips that you didn't pin with a rule.
+    mine = []
+    if settings.get("auto_place_my_clips", True):
+        library = broll_library.scan()
+        unplaced_ids = [cid for cid in library if cid not in used_clip_ids]
+        for a in llm_handler.place_my_clips(transcript, unplaced_ids, settings):
+            mine.append({
+                "clip_id": a["clip_id"],
+                "path": library[a["clip_id"]],
+                "start": a["segment_start"],
+                "end": None,  # your clip plays its natural length
+                "source": "auto-mine",
+                "rule": a,
+            })
+
+    # 3b. Auto stock B-roll for any remaining gaps.
+    auto = llm_handler.suggest_broll(transcript, settings) if settings.get("auto_broll", True) else []
+    placements = _merge_placements(manual + mine, auto, settings)
+    log.info(f"{len(placements)} total placement(s): "
+             f"{sum(1 for p in placements if p['source']=='manual')} manual, "
+             f"{sum(1 for p in placements if p['source']=='auto-mine')} your-clips(auto), "
+             f"{sum(1 for p in placements if p['source']=='auto')} stock.")
+
+    log.info("=== Step 4/5: Render (captions + output format) ===")
+    config.OUTPUT_DIR.mkdir(exist_ok=True)
+    output_path = str(config.OUTPUT_DIR / f"{project_name}_final.mp4")
+    ass_path = video_processor.render(founder_path, placements, output_path, transcript, settings)
+
+    stems_zip = None
+    if settings.get("export_stems", True):
+        log.info("=== Step 5/5: Stems export (CapCut hand-off) ===")
+        stems_zip = stems_export.export(
+            project_name, founder_path, placements, transcript, audio, ass_path, settings
+        )
+
+    return {
+        "output": output_path,
+        "stems_zip": stems_zip,
+        "placements": placements,
+        "transcript_text": transcript["text"],
+        "word_count": len(transcript["words"]),
+    }
+
+
+def _cli():
+    p = argparse.ArgumentParser(description="OVM Ad Engine")
+    p.add_argument("--input_video", required=True)
+    p.add_argument("--style", help="hormozi | mrbeast | karaoke | highlight")
+    p.add_argument("--provider", help="ollama | claude")
+    p.add_argument("--no-auto-broll", action="store_true", help="manual clips only")
+    args = p.parse_args()
+
+    settings = config.load_settings()
+    if args.style:
+        settings["caption_style"] = args.style
+    if args.provider:
+        settings["llm_provider"] = args.provider
+    if args.no_auto_broll:
+        settings["auto_broll"] = False
+
+    result = run(args.input_video, settings)
+    if "error" in result:
+        log.error(result["error"])
+    else:
+        log.info(f"DONE. Video: {result['output']}")
+        if result["stems_zip"]:
+            log.info(f"Stems: {result['stems_zip']}")
+
+
+if __name__ == "__main__":
+    _cli()

@@ -1,22 +1,11 @@
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Logs
-*.log
-npm-debug.log*
-
-# Node (if you add tooling later)
-node_modules/
-.npm
-
-# Netlify
-.netlify/
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ovm-ad-engine",
+      "runtimeExecutable": "venv\\Scripts\\python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "webapp:app", "--host", "127.0.0.1", "--port", "8000"],
+      "port": 8000
+    }
+  ]
+}
