@@ -1,389 +1,1355 @@
-import React, { useState, useEffect } from 'react';
-import Icon from '../../../components/AppIcon';
-import Button from '../../../components/ui/Button';
-import Input from '../../../components/ui/Input';
-import Select from '../../../components/ui/Select';
-import { Checkbox } from '../../../components/ui/Checkbox';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OneVibeMedia | Premium Media & Marketing Systems</title>
+<meta name="description" content="OneVibeMedia &mdash; premium web development, 3D, content, SEO and social systems for brands that want to feel as good as they convert.">
+<meta name="theme-color" content="#050507">
+<meta property="og:title" content="OneVibeMedia | Premium Media & Marketing Systems">
+<meta property="og:description" content="Premium web development, 3D, content, SEO and social systems built to scale &mdash; without noise, pressure, or misalignment.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://onevibemedia.shop">
+<link rel="icon" href="assets/logo.png" type="image/png">
+<link rel="apple-touch-icon" href="assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Sora:wght@200;300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-const AudioQualityPanel = () => {
-  const [audioSettings, setAudioSettings] = useState({
-    inputDevice: 'default',
-    outputDevice: 'default',
-    sampleRate: 44100,
-    bitRate: 128,
-    noiseReduction: true,
-    echoCancellation: true,
-    autoGainControl: true,
-    bandwidthOptimization: 'auto',
-    bufferSize: 1024,
-    microphoneGain: 75,
-    speakerVolume: 80
-  });
+<style>
+/* ============================================
+   TOKENS
+============================================ */
+:root {
+  --bg:#050507;
+  --bg2:#0A0B0F;
+  --bg3:#0E1014;
+  --card:#111318;
+  --card-hover:#14171E;
+  --border:rgba(255,255,255,0.06);
+  --border2:rgba(255,255,255,0.1);
+  --border-strong:rgba(255,255,255,0.16);
+  --white:#F0F0F2;
+  --off:#D4D4D8;
+  --muted:#8A8C97;
+  --dim:#5A5C65;
+  --accent:#4D8BF5;
+  --accent2:#6EA0F7;
+  --accent-bright:#7BB3FF;
+  --accent-dim:rgba(77,139,245,0.08);
+  --accent-border:rgba(77,139,245,0.22);
+  --warm:#C4A265;
+  --grid:rgba(255,255,255,0.04);
+  --noise-opacity:0.035;
+  --shadow-card:0 16px 48px rgba(0,0,0,0.5);
+  --shadow-glow:0 0 80px rgba(77,139,245,0.18);
+  --nav-bg:rgba(5,5,7,0.72);
+  --hero-glow1:rgba(77,139,245,0.16);
+  --hero-glow2:rgba(126,90,224,0.10);
+  --hero-glow3:rgba(196,162,101,0.07);
+}
 
-  const [audioDevices, setAudioDevices] = useState({
-    input: [
-      { value: 'default', label: 'Default Microphone' },
-      { value: 'usb-mic-1', label: 'USB Microphone (Logitech)' },
-      { value: 'headset-1', label: 'Bluetooth Headset' }
-    ],
-    output: [
-      { value: 'default', label: 'Default Speakers' },
-      { value: 'headphones-1', label: 'Wired Headphones' },
-      { value: 'bluetooth-1', label: 'Bluetooth Speakers' }
-    ]
-  });
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body {
+  background:var(--bg);
+  color:var(--white);
+  font-family:'Sora',-apple-system,BlinkMacSystemFont,sans-serif;
+  overflow-x:hidden;
+  font-size:15px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  transition:background-color .4s ease,color .4s ease;
+}
+::selection { background:rgba(77,139,245,0.3); color:#fff; }
 
-  const [isCalibrating, setIsCalibrating] = useState(false);
-  const [calibrationStep, setCalibrationStep] = useState(0);
-  const [audioLevels, setAudioLevels] = useState({
-    input: 0,
-    output: 0,
-    background: 0
-  });
+img { max-width:100%; display:block; }
+a { color:inherit; }
 
-  const [testResults, setTestResults] = useState({
-    latency: 45,
-    quality: 'excellent',
-    stability: 98
-  });
+/* ============================================
+   NAV
+============================================ */
+nav {
+  position:fixed; top:0; left:0; right:0; z-index:999;
+  padding:0 40px; height:64px;
+  display:flex; justify-content:space-between; align-items:center;
+  background:var(--nav-bg);
+  backdrop-filter:saturate(180%) blur(20px);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid var(--border);
+  transition:background-color .4s ease, border-color .4s ease;
+}
+.nav-brand { display:flex; align-items:center; gap:10px; text-decoration:none; }
+.nav-brand img {
+  height:30px; width:auto;
+}
+.nav-links {
+  display:flex; gap:36px; align-items:center;
+}
+.nav-links a {
+  font-size:12.5px; font-weight:400; color:var(--muted);
+  text-decoration:none; transition:color .25s ease;
+  letter-spacing:0.4px; position:relative;
+}
+.nav-links a:hover { color:var(--white); }
+.nav-cta {
+  font-size:12.5px; font-weight:500; color:#fff !important;
+  background:var(--accent); padding:9px 22px;
+  border-radius:24px; text-decoration:none;
+  transition:all .3s ease;
+}
+.nav-cta:hover {
+  background:var(--accent2);
+  box-shadow:0 6px 24px rgba(77,139,245,0.30);
+  transform:translateY(-1px);
+}
 
-  const sampleRateOptions = [
-    { value: 22050, label: '22.05 kHz (Low)' },
-    { value: 44100, label: '44.1 kHz (Standard)' },
-    { value: 48000, label: '48 kHz (High)' },
-    { value: 96000, label: '96 kHz (Ultra)' }
-  ];
+.mobile-toggle {
+  display:none; flex-direction:column; gap:5px; cursor:pointer;
+  width:24px; height:24px; padding:6px 2px; box-sizing:border-box;
+}
+.mobile-toggle span {
+  width:100%; height:1.5px; background:var(--white); transition:all .3s ease;
+}
 
-  const bitRateOptions = [
-    { value: 64, label: '64 kbps (Low)' },
-    { value: 128, label: '128 kbps (Standard)' },
-    { value: 192, label: '192 kbps (High)' },
-    { value: 320, label: '320 kbps (Ultra)' }
-  ];
+/* ============================================
+   HERO
+============================================ */
+.hero {
+  min-height:100vh;
+  display:flex; align-items:center; justify-content:center;
+  text-align:center;
+  padding:160px 32px 120px;
+  position:relative; overflow:hidden;
+}
+.hero-bg {
+  position:absolute; inset:0;
+  pointer-events:none; z-index:0; overflow:hidden;
+}
+/* mesh orbs */
+.hero-orb {
+  position:absolute; border-radius:50%;
+  filter:blur(80px);
+  opacity:0.85;
+  will-change:transform;
+}
+.orb1 {
+  width:640px; height:640px; top:-180px; left:-160px;
+  background:var(--hero-glow1);
+  animation:drift1 18s ease-in-out infinite alternate;
+}
+.orb2 {
+  width:560px; height:560px; bottom:-200px; right:-140px;
+  background:var(--hero-glow2);
+  animation:drift2 22s ease-in-out infinite alternate;
+}
+.orb3 {
+  width:420px; height:420px; top:30%; left:40%;
+  background:var(--hero-glow3);
+  animation:drift3 26s ease-in-out infinite alternate;
+}
+@keyframes drift1 { from{transform:translate(0,0) scale(1)} to{transform:translate(120px,80px) scale(1.1)} }
+@keyframes drift2 { from{transform:translate(0,0) scale(1)} to{transform:translate(-80px,-100px) scale(1.05)} }
+@keyframes drift3 { from{transform:translate(-40px,-20px) scale(.95)} to{transform:translate(60px,40px) scale(1.08)} }
 
-  const bandwidthOptions = [
-    { value: 'auto', label: 'Auto (Recommended)' },
-    { value: 'low', label: 'Low Bandwidth' },
-    { value: 'medium', label: 'Medium Bandwidth' },
-    { value: 'high', label: 'High Bandwidth' }
-  ];
+/* noise overlay */
+.noise {
+  position:fixed; inset:0; z-index:9998;
+  pointer-events:none;
+  opacity:var(--noise-opacity);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .9 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  mix-blend-mode:overlay;
+}
 
-  const bufferSizeOptions = [
-    { value: 256, label: '256 samples (Low Latency)' },
-    { value: 512, label: '512 samples (Balanced)' },
-    { value: 1024, label: '1024 samples (Stable)' },
-    { value: 2048, label: '2048 samples (High Stability)' }
-  ];
+.hero-content { max-width:880px; position:relative; z-index:2; }
+.hero-eyebrow {
+  display:inline-flex; align-items:center; gap:8px;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px; font-weight:400; letter-spacing:2.5px;
+  text-transform:uppercase; color:var(--accent2);
+  padding:7px 16px;
+  background:var(--accent-dim);
+  border:1px solid var(--accent-border);
+  border-radius:30px;
+  margin-bottom:32px;
+  opacity:0; animation:softIn 1.2s .15s forwards;
+}
+.hero-eyebrow .dot { width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 12px var(--accent); animation:pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-  useEffect(() => {
-    // Simulate audio level monitoring
-    const interval = setInterval(() => {
-      setAudioLevels({
-        input: Math.random() * 100,
-        output: Math.random() * 80,
-        background: Math.random() * 20
-      });
-    }, 100);
+.hero h1 {
+  font-family:'Cormorant Garamond',serif;
+  font-size:clamp(48px,7.4vw,96px);
+  font-weight:300; line-height:1.02; letter-spacing:-1.5px;
+  margin-bottom:28px;
+  opacity:0; animation:softIn 1.2s .35s forwards;
+}
+.hero h1 .gradient {
+  background:linear-gradient(120deg, var(--accent-bright) 0%, var(--accent) 40%, var(--warm) 100%);
+  -webkit-background-clip:text; background-clip:text;
+  color:transparent;
+  font-style:italic;
+}
+.hero-sub {
+  font-size:17px; font-weight:300; line-height:1.7;
+  color:var(--muted); max-width:600px; margin:0 auto 44px;
+  opacity:0; animation:softIn 1.2s .55s forwards;
+}
+.hero-btns {
+  display:flex; gap:14px; justify-content:center; flex-wrap:wrap;
+  opacity:0; animation:softIn 1.2s .75s forwards;
+}
 
-    return () => clearInterval(interval);
-  }, []);
+.btn-accent, .btn-outline {
+  font-family:'Sora',sans-serif;
+  font-size:14px; font-weight:500;
+  padding:14px 32px; border-radius:32px;
+  text-decoration:none; cursor:pointer;
+  transition:all .35s cubic-bezier(.25,1,.5,1);
+  display:inline-flex; align-items:center; gap:8px;
+  border:1px solid transparent;
+}
+.btn-accent {
+  color:#fff; background:var(--accent);
+  box-shadow:0 8px 24px rgba(77,139,245,0.20);
+}
+.btn-accent:hover {
+  background:var(--accent2);
+  box-shadow:0 12px 36px rgba(77,139,245,0.32);
+  transform:translateY(-2px);
+}
+.btn-outline {
+  color:var(--off);
+  border-color:var(--border-strong);
+  background:transparent;
+}
+.btn-outline:hover {
+  color:var(--white);
+  background:var(--bg3);
+  border-color:var(--white);
+  transform:translateY(-2px);
+}
+.btn-arrow { transition:transform .3s; }
+.btn-accent:hover .btn-arrow, .btn-outline:hover .btn-arrow { transform:translateX(3px); }
 
-  const handleSettingChange = (key, value) => {
-    setAudioSettings(prev => ({ ...prev, [key]: value }));
-  };
+@keyframes softIn { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
 
-  const startCalibration = () => {
-    setIsCalibrating(true);
-    setCalibrationStep(0);
-    
-    // Simulate calibration process
-    const steps = [
-      'Detecting audio devices...',
-      'Testing microphone levels...',
-      'Calibrating speaker output...',
-      'Measuring background noise...',
-      'Optimizing settings...'
-    ];
+/* trust row */
+.hero-trust {
+  display:flex; gap:32px; justify-content:center; flex-wrap:wrap;
+  margin-top:64px;
+  opacity:0; animation:softIn 1.2s .95s forwards;
+}
+.hero-trust-item {
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+}
+.hero-trust-num {
+  font-family:'Cormorant Garamond',serif;
+  font-size:26px; font-weight:400; color:var(--white);
+  letter-spacing:-0.5px;
+}
+.hero-trust-label {
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px; font-weight:400; letter-spacing:2px;
+  text-transform:uppercase; color:var(--dim);
+}
 
-    let currentStep = 0;
-    const stepInterval = setInterval(() => {
-      currentStep++;
-      setCalibrationStep(currentStep);
-      
-      if (currentStep >= steps.length) {
-        clearInterval(stepInterval);
-        setTimeout(() => {
-          setIsCalibrating(false);
-          setTestResults({
-            latency: Math.floor(Math.random() * 20) + 30,
-            quality: ['good', 'excellent', 'excellent'][Math.floor(Math.random() * 3)],
-            stability: Math.floor(Math.random() * 10) + 90
-          });
-        }, 1000);
-      }
-    }, 1500);
-  };
+/* ============================================
+   MARQUEE
+============================================ */
+.marquee {
+  padding:22px 0; overflow:hidden;
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+  background:var(--bg2);
+  position:relative; z-index:3;
+}
+.marquee::before,
+.marquee::after {
+  content:''; position:absolute; top:0; bottom:0; width:120px;
+  z-index:2; pointer-events:none;
+}
+.marquee::before { left:0; background:linear-gradient(90deg, var(--bg2), transparent); }
+.marquee::after { right:0; background:linear-gradient(-90deg, var(--bg2), transparent); }
+.marquee-track {
+  display:flex; width:max-content;
+  animation:mq 50s linear infinite;
+}
+.marquee-track span {
+  font-family:'Cormorant Garamond',serif;
+  font-size:18px; font-weight:300;
+  white-space:nowrap; padding:0 36px;
+  color:var(--dim); font-style:italic; letter-spacing:1px;
+  display:flex; align-items:center; gap:36px;
+}
+.marquee-track span::after {
+  content:''; width:4px; height:4px;
+  background:var(--accent); border-radius:50%; opacity:.6;
+}
+@keyframes mq { from{transform:translateX(0)} to{transform:translateX(-50%)} }
 
-  const runAudioTest = () => {
-    console.log('Running audio test...');
-    // Simulate audio test
-    setTimeout(() => {
-      setTestResults({
-        latency: Math.floor(Math.random() * 30) + 25,
-        quality: ['good', 'excellent'][Math.floor(Math.random() * 2)],
-        stability: Math.floor(Math.random() * 15) + 85
-      });
-    }, 2000);
-  };
+/* ============================================
+   SECTIONS
+============================================ */
+section { padding:120px 40px; position:relative; }
+.inner { max-width:1200px; margin:0 auto; }
+.s-eyebrow {
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10.5px; font-weight:500; letter-spacing:3px;
+  text-transform:uppercase; color:var(--accent2);
+  margin-bottom:16px;
+  display:flex; align-items:center; gap:10px;
+}
+.s-eyebrow::before {
+  content:''; width:18px; height:1px; background:var(--accent); display:inline-block;
+}
+.s-title {
+  font-family:'Cormorant Garamond',serif;
+  font-size:clamp(34px,4.4vw,56px);
+  font-weight:300; margin-bottom:16px;
+  letter-spacing:-0.5px; line-height:1.12;
+}
+.s-sub {
+  font-size:15.5px; color:var(--muted);
+  max-width:560px; line-height:1.8;
+  margin-bottom:56px; font-weight:300;
+}
 
-  const getQualityColor = (quality) => {
-    switch (quality) {
-      case 'excellent': return 'text-success';
-      case 'good': return 'text-warning';
-      case 'poor': return 'text-error';
-      default: return 'text-muted-foreground';
-    }
-  };
+/* ============================================
+   BUNDLE BANNER
+============================================ */
+.bundle-banner {
+  background:linear-gradient(135deg, var(--accent-dim) 0%, transparent 100%);
+  border:1px solid var(--accent-border);
+  border-radius:14px; padding:22px 28px;
+  margin-bottom:48px;
+  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+  position:relative; overflow:hidden;
+}
+.bundle-banner::before {
+  content:''; position:absolute;
+  top:-50%; right:-10%; width:300px; height:300px;
+  background:radial-gradient(circle, var(--accent-dim), transparent 70%);
+  pointer-events:none;
+}
+.bundle-icon {
+  width:40px; height:40px;
+  background:var(--accent); color:#fff;
+  border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:18px; font-weight:600; flex-shrink:0;
+  box-shadow:0 6px 20px rgba(77,139,245,0.30);
+}
+.bundle-text { flex:1; position:relative; z-index:1; }
+.bundle-text strong {
+  color:var(--accent-bright); font-weight:600; font-size:14px;
+  letter-spacing:0.3px;
+}
+.bundle-text p {
+  font-size:13px; color:var(--muted); font-weight:300; margin-top:3px;
+}
 
-  const calibrationSteps = [
-    'Detecting audio devices...',
-    'Testing microphone levels...',
-    'Calibrating speaker output...',
-    'Measuring background noise...',
-    'Optimizing settings...'
-  ];
+/* ============================================
+   PILLAR TABS
+============================================ */
+.pillar-tabs {
+  display:flex; gap:0; margin-bottom:48px;
+  border-bottom:1px solid var(--border);
+  overflow-x:auto;
+  scrollbar-width:none;
+}
+.pillar-tabs::-webkit-scrollbar { display:none; }
+.pillar-tab {
+  font-size:13px; font-weight:400; color:var(--dim);
+  padding:18px 28px; cursor:pointer;
+  transition:all .3s ease; white-space:nowrap;
+  border-bottom:2px solid transparent;
+  letter-spacing:0.3px; position:relative;
+}
+.pillar-tab:hover { color:var(--off); }
+.pillar-tab.active {
+  color:var(--accent-bright); border-bottom-color:var(--accent);
+}
 
-  return (
-    <div className="space-y-8">
-      {/* Device Selection */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">Audio Devices</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Select
-            label="Input Device (Microphone)"
-            options={audioDevices.input}
-            value={audioSettings.inputDevice}
-            onChange={(value) => handleSettingChange('inputDevice', value)}
-          />
-          <Select
-            label="Output Device (Speakers)"
-            options={audioDevices.output}
-            value={audioSettings.outputDevice}
-            onChange={(value) => handleSettingChange('outputDevice', value)}
-          />
-        </div>
-        <div className="mt-6 flex items-center space-x-4">
-          <Button
-            variant="outline"
-            iconName="Settings"
-            iconPosition="left"
-            onClick={startCalibration}
-            disabled={isCalibrating}
-          >
-            {isCalibrating ? 'Calibrating...' : 'Auto Calibrate'}
-          </Button>
-          <Button
-            variant="outline"
-            iconName="TestTube"
-            iconPosition="left"
-            onClick={runAudioTest}
-          >
-            Test Audio
-          </Button>
-        </div>
-      </div>
+.pillar-content { display:none; }
+.pillar-content.active { display:block; animation:fadeIn .5s ease; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
 
-      {/* Audio Levels Monitor */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">Real-time Audio Levels</h3>
-        <div className="space-y-4">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-foreground">Microphone Input</span>
-              <span className="text-xs text-muted-foreground">{Math.round(audioLevels.input)}%</span>
-            </div>
-            <div className="w-full bg-muted rounded-full h-3">
-              <div 
-                className={`h-3 rounded-full transition-all duration-100 ${
-                  audioLevels.input > 80 ? 'bg-error' : 
-                  audioLevels.input > 60 ? 'bg-warning' : 'bg-success'
-                }`}
-                style={{ width: `${audioLevels.input}%` }}
-              ></div>
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-foreground">Speaker Output</span>
-              <span className="text-xs text-muted-foreground">{Math.round(audioLevels.output)}%</span>
-            </div>
-            <div className="w-full bg-muted rounded-full h-3">
-              <div 
-                className="bg-primary h-3 rounded-full transition-all duration-100"
-                style={{ width: `${audioLevels.output}%` }}
-              ></div>
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-foreground">Background Noise</span>
-              <span className="text-xs text-muted-foreground">{Math.round(audioLevels.background)}%</span>
-            </div>
-            <div className="w-full bg-muted rounded-full h-3">
-              <div 
-                className={`h-3 rounded-full transition-all duration-100 ${
-                  audioLevels.background > 30 ? 'bg-error' : 
-                  audioLevels.background > 15 ? 'bg-warning' : 'bg-success'
-                }`}
-                style={{ width: `${audioLevels.background}%` }}
-              ></div>
-            </div>
-          </div>
-        </div>
-      </div>
+/* ============================================
+   TILES
+============================================ */
+.tiles-grid {
+  display:grid; grid-template-columns:repeat(3,1fr);
+  gap:16px; margin-bottom:40px;
+}
+.tile {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:16px; padding:30px 26px;
+  transition:all .5s cubic-bezier(.25,1,.5,1);
+  display:flex; flex-direction:column;
+  position:relative; overflow:hidden;
+}
+.tile::before {
+  content:''; position:absolute; inset:0;
+  background:radial-gradient(circle 320px at var(--mx,50%) var(--my,0%), var(--accent-dim), transparent 70%);
+  opacity:0; transition:opacity .4s; pointer-events:none;
+}
+.tile:hover {
+  border-color:var(--accent-border);
+  transform:translateY(-4px);
+  box-shadow:var(--shadow-card);
+}
+.tile:hover::before { opacity:1; }
+.tile > * { position:relative; z-index:1; }
+.tile-badge {
+  font-family:'IBM Plex Mono',monospace;
+  font-size:9.5px; font-weight:500; letter-spacing:2px;
+  text-transform:uppercase; color:var(--accent2);
+  margin-bottom:18px;
+  display:inline-block; padding:4px 10px;
+  background:var(--accent-dim); border-radius:20px;
+  border:1px solid var(--accent-border);
+  width:fit-content;
+}
+.tile-name {
+  font-family:'Cormorant Garamond',serif;
+  font-size:23px; font-weight:400; color:var(--white);
+  margin-bottom:6px; line-height:1.2;
+}
+.tile-desc {
+  font-size:12.5px; color:var(--dim);
+  margin-bottom:22px; font-style:italic; font-weight:300;
+}
+.tile-features { list-style:none; margin-bottom:28px; flex-grow:1; }
+.tile-features li {
+  font-size:13px; color:var(--off);
+  padding:5px 0 5px 16px;
+  position:relative; line-height:1.6; font-weight:300;
+}
+.tile-features li::before {
+  content:''; position:absolute; left:0; top:14px;
+  width:7px; height:1px; background:var(--accent);
+}
+.tile-price {
+  font-size:19px; font-weight:500; color:var(--white);
+  margin-bottom:22px; letter-spacing:-0.3px;
+}
+.tile-price span { font-size:12px; color:var(--dim); font-weight:300; }
+.tile-cta {
+  display:block; text-align:center;
+  font-size:12.5px; font-weight:500; color:var(--white);
+  background:var(--accent-dim);
+  border:1px solid var(--accent-border);
+  padding:13px; border-radius:10px;
+  text-decoration:none; cursor:pointer;
+  transition:all .4s ease; letter-spacing:0.3px;
+}
+.tile-cta:hover {
+  background:var(--accent); color:#fff;
+  border-color:var(--accent);
+  box-shadow:0 6px 20px rgba(77,139,245,0.30);
+}
 
-      {/* Quality Settings */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">Audio Quality Settings</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Select
-            label="Sample Rate"
-            description="Higher rates provide better quality but use more bandwidth"
-            options={sampleRateOptions}
-            value={audioSettings.sampleRate}
-            onChange={(value) => handleSettingChange('sampleRate', parseInt(value))}
-          />
-          <Select
-            label="Bit Rate"
-            description="Audio compression quality"
-            options={bitRateOptions}
-            value={audioSettings.bitRate}
-            onChange={(value) => handleSettingChange('bitRate', parseInt(value))}
-          />
-          <Select
-            label="Bandwidth Optimization"
-            description="Optimize for network conditions"
-            options={bandwidthOptions}
-            value={audioSettings.bandwidthOptimization}
-            onChange={(value) => handleSettingChange('bandwidthOptimization', value)}
-          />
-          <Select
-            label="Buffer Size"
-            description="Balance between latency and stability"
-            options={bufferSizeOptions}
-            value={audioSettings.bufferSize}
-            onChange={(value) => handleSettingChange('bufferSize', parseInt(value))}
-          />
-        </div>
-      </div>
+/* ============================================
+   GALLERY
+============================================ */
+.gallery-wrap {
+  margin-top:64px; padding-top:56px;
+  border-top:1px solid var(--border);
+}
+.gallery-label {
+  font-family:'Cormorant Garamond',serif;
+  font-size:26px; font-weight:300; margin-bottom:6px;
+}
+.gallery-sub {
+  font-size:13px; color:var(--dim);
+  margin-bottom:24px; font-weight:300;
+}
+.gallery-scroll {
+  display:flex; gap:14px; overflow-x:auto;
+  padding-bottom:14px; -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
+}
+.gallery-scroll::-webkit-scrollbar { height:3px; }
+.gallery-scroll::-webkit-scrollbar-thumb { background:var(--border-strong); border-radius:4px; }
+.gallery-card {
+  min-width:240px; height:180px;
+  background:var(--bg3); border:1px solid var(--border);
+  border-radius:14px; overflow:hidden;
+  position:relative; cursor:pointer;
+  flex-shrink:0; transition:all .4s ease;
+}
+.gallery-card:hover {
+  border-color:var(--accent-border);
+  transform:translateY(-3px);
+  box-shadow:var(--shadow-card);
+}
+.gallery-card-img {
+  width:100%; height:100%; object-fit:cover;
+  transition:transform .5s ease;
+}
+.gallery-card:hover .gallery-card-img { transform:scale(1.05); }
+.gallery-card-label {
+  position:absolute; bottom:0; left:0; right:0;
+  padding:12px 14px;
+  background:linear-gradient(transparent, rgba(0,0,0,0.85));
+  font-size:11.5px; font-weight:500; color:#F0F0F2;
+}
+.gallery-card-tag {
+  position:absolute; top:10px; right:10px;
+  font-size:8.5px; font-weight:500; letter-spacing:1.5px;
+  text-transform:uppercase;
+  background:rgba(77,139,245,0.18); color:#fff;
+  padding:4px 8px; border-radius:4px;
+  backdrop-filter:blur(8px);
+}
+.gallery-card-play {
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  width:48px; height:48px; border-radius:50%;
+  background:rgba(0,0,0,0.55);
+  border:1px solid rgba(255,255,255,0.4);
+  display:flex; align-items:center; justify-content:center;
+  opacity:0; transition:opacity .3s;
+  backdrop-filter:blur(8px);
+}
+.gallery-card:hover .gallery-card-play { opacity:1; }
+.gallery-card-play::after {
+  content:''; width:0; height:0;
+  border-left:11px solid #fff; border-top:7px solid transparent;
+  border-bottom:7px solid transparent; margin-left:3px;
+}
 
-      {/* Volume Controls */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">Volume Controls</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <Input
-              label="Microphone Gain (%)"
-              type="range"
-              min="0"
-              max="100"
-              value={audioSettings.microphoneGain}
-              onChange={(e) => handleSettingChange('microphoneGain', parseInt(e.target.value))}
-              description={`Current: ${audioSettings.microphoneGain}%`}
-            />
-          </div>
-          <div>
-            <Input
-              label="Speaker Volume (%)"
-              type="range"
-              min="0"
-              max="100"
-              value={audioSettings.speakerVolume}
-              onChange={(e) => handleSettingChange('speakerVolume', parseInt(e.target.value))}
-              description={`Current: ${audioSettings.speakerVolume}%`}
-            />
-          </div>
-        </div>
-      </div>
+/* ============================================
+   MANIFESTO
+============================================ */
+.manifesto {
+  padding:140px 32px; text-align:center; position:relative;
+}
+.manifesto::before {
+  content:''; position:absolute; inset:0;
+  background:radial-gradient(ellipse 60% 40% at 50% 50%, var(--accent-dim), transparent 60%);
+  pointer-events:none;
+}
+.manifesto-text {
+  font-family:'Cormorant Garamond',serif;
+  font-size:clamp(28px,4.4vw,52px);
+  font-weight:300; line-height:1.4;
+  max-width:840px; margin:0 auto; color:var(--off);
+  position:relative; z-index:1;
+}
+.manifesto-text em {
+  font-style:italic;
+  background:linear-gradient(120deg, var(--accent-bright), var(--warm));
+  -webkit-background-clip:text; background-clip:text;
+  color:transparent;
+}
 
-      {/* Audio Processing */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">Audio Processing</h3>
-        <div className="space-y-4">
-          <Checkbox
-            label="Noise Reduction"
-            description="Automatically reduce background noise"
-            checked={audioSettings.noiseReduction}
-            onChange={(e) => handleSettingChange('noiseReduction', e.target.checked)}
-          />
-          <Checkbox
-            label="Echo Cancellation"
-            description="Prevent audio feedback and echo"
-            checked={audioSettings.echoCancellation}
-            onChange={(e) => handleSettingChange('echoCancellation', e.target.checked)}
-          />
-          <Checkbox
-            label="Auto Gain Control"
-            description="Automatically adjust microphone sensitivity"
-            checked={audioSettings.autoGainControl}
-            onChange={(e) => handleSettingChange('autoGainControl', e.target.checked)}
-          />
-        </div>
-      </div>
+/* ============================================
+   FLIP CARDS (Mission/Vision/Portfolio)
+============================================ */
+.flip-section {
+  background:var(--bg2);
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+}
+.flip-grid {
+  display:grid; grid-template-columns:repeat(3,1fr);
+  gap:20px; margin-top:48px;
+}
+.flip-card { perspective:1000px; height:300px; cursor:pointer; }
+.flip-inner {
+  position:relative; width:100%; height:100%;
+  transition:transform .7s cubic-bezier(.25,1,.5,1);
+  transform-style:preserve-3d;
+}
+.flip-card:hover .flip-inner { transform:rotateY(180deg); }
+.flip-front, .flip-back {
+  position:absolute; inset:0;
+  backface-visibility:hidden;
+  border-radius:16px;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  padding:36px; text-align:center;
+}
+.flip-front {
+  background:var(--card); border:1px solid var(--border);
+}
+.flip-front h3 {
+  font-family:'Cormorant Garamond',serif;
+  font-size:28px; font-weight:300; margin-bottom:10px;
+}
+.flip-front p {
+  font-size:11px; color:var(--dim);
+  letter-spacing:1.5px; text-transform:uppercase;
+}
+.flip-back {
+  background:var(--bg3);
+  border:1px solid var(--accent-border);
+  transform:rotateY(180deg);
+}
+.flip-back p {
+  font-size:13.5px; color:var(--off);
+  line-height:1.8; font-weight:300;
+}
+.flip-back a {
+  display:inline-block; margin-top:18px;
+  font-size:12px; font-weight:500; color:#fff;
+  text-decoration:none;
+  background:var(--accent);
+  padding:10px 24px; border-radius:20px;
+  transition:all .3s;
+}
+.flip-back a:hover {
+  background:var(--accent2);
+  box-shadow:0 6px 20px rgba(77,139,245,0.30);
+}
 
-      {/* Test Results */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">Audio Performance</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-muted rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-foreground">{testResults.latency}ms</div>
-            <div className="text-sm text-muted-foreground">Latency</div>
-          </div>
-          <div className="bg-muted rounded-lg p-4 text-center">
-            <div className={`text-2xl font-bold ${getQualityColor(testResults.quality)}`}>
-              {testResults.quality.charAt(0).toUpperCase() + testResults.quality.slice(1)}
-            </div>
-            <div className="text-sm text-muted-foreground">Quality</div>
-          </div>
-          <div className="bg-muted rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-foreground">{testResults.stability}%</div>
-            <div className="text-sm text-muted-foreground">Stability</div>
-          </div>
-        </div>
-      </div>
+/* ============================================
+   PORTFOLIO  (3 SITE CARDS)
+============================================ */
+#portfolio { padding-top:120px; }
+.portfolio-grid {
+  display:grid; grid-template-columns:repeat(3,1fr);
+  gap:20px; margin-top:48px;
+}
+.site-card {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:18px; overflow:hidden;
+  transition:all .5s cubic-bezier(.25,1,.5,1);
+  display:flex; flex-direction:column;
+  text-decoration:none; color:inherit;
+  position:relative;
+}
+.site-card::after {
+  content:''; position:absolute; inset:0; border-radius:18px;
+  padding:1px;
+  background:linear-gradient(180deg, var(--accent-border), transparent 50%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude;
+  pointer-events:none; opacity:0; transition:opacity .4s;
+}
+.site-card:hover {
+  border-color:var(--accent-border);
+  transform:translateY(-6px);
+  box-shadow:0 24px 60px rgba(0,0,0,0.4), 0 0 60px rgba(77,139,245,0.10);
+}
+.site-card:hover::after { opacity:1; }
 
-      {/* Calibration Modal */}
-      {isCalibrating && (
-        <div className="fixed inset-0 z-modal bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-border rounded-lg shadow-floating w-full max-w-md">
-            <div className="p-6">
-              <div className="text-center mb-6">
-                <Icon name="Settings" size={48} className="text-primary mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-foreground">Audio Calibration</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Please wait while we optimize your audio settings
-                </p>
-              </div>
-              <div className="space-y-4">
-                <div className="text-sm text-foreground">
-                  {calibrationSteps[calibrationStep] || 'Completing calibration...'}
-                </div>
-                <div className="w-full bg-muted rounded-full h-2">
-                  <div 
-                    className="bg-primary h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${(calibrationStep / calibrationSteps.length) * 100}%` }}
-                  ></div>
-                </div>
-                <div className="text-xs text-muted-foreground text-center">
-                  Step {Math.min(calibrationStep + 1, calibrationSteps.length)} of {calibrationSteps.length}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+/* browser-frame mockup */
+.site-frame {
+  background:var(--bg3); position:relative;
+  border-bottom:1px solid var(--border);
+  overflow:hidden;
+}
+.site-chrome {
+  display:flex; align-items:center; gap:6px;
+  padding:10px 14px;
+  background:var(--bg2);
+  border-bottom:1px solid var(--border);
+}
+.site-chrome span {
+  width:9px; height:9px; border-radius:50%;
+  background:var(--dim); opacity:.5;
+}
+.site-chrome span:nth-child(1) { background:#FF5F57; opacity:.8; }
+.site-chrome span:nth-child(2) { background:#FEBC2E; opacity:.8; }
+.site-chrome span:nth-child(3) { background:#27C840; opacity:.8; }
+.site-chrome .url {
+  margin-left:14px; flex:1;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10.5px; color:var(--dim);
+  background:var(--bg3); padding:4px 10px;
+  border-radius:8px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.site-img {
+  width:100%; aspect-ratio:16/10; object-fit:cover;
+  display:block; background:var(--bg3);
+  transition:transform .6s cubic-bezier(.25,1,.5,1);
+}
+.site-card:hover .site-img { transform:scale(1.04); }
+.site-img-placeholder {
+  width:100%; aspect-ratio:16/10;
+  display:flex; align-items:center; justify-content:center;
+  background:
+    radial-gradient(circle at 30% 30%, var(--accent-dim), transparent 50%),
+    radial-gradient(circle at 70% 60%, rgba(196,162,101,0.08), transparent 50%),
+    var(--bg3);
+  position:relative;
+}
+.site-img-placeholder::before {
+  content:''; position:absolute; inset:0;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size:32px 32px;
+}
+.site-img-placeholder span {
+  position:relative; z-index:1;
+  font-family:'Cormorant Garamond',serif;
+  font-size:28px; font-weight:300;
+  color:var(--off); letter-spacing:0.5px;
+}
+
+.site-info {
+  padding:24px 26px 26px;
+  display:flex; flex-direction:column; gap:8px;
+  flex-grow:1;
+}
+.site-info-tag {
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px; font-weight:500;
+  letter-spacing:2px; text-transform:uppercase;
+  color:var(--accent2); margin-bottom:4px;
+}
+.site-info h4 {
+  font-family:'Cormorant Garamond',serif;
+  font-size:22px; font-weight:400;
+  color:var(--white); line-height:1.25;
+}
+.site-info p {
+  font-size:13px; color:var(--muted);
+  line-height:1.65; font-weight:300; flex-grow:1;
+}
+.site-link {
+  display:inline-flex; align-items:center; gap:6px;
+  margin-top:12px; font-size:12.5px; font-weight:500;
+  color:var(--accent-bright);
+  transition:gap .3s ease;
+}
+.site-card:hover .site-link { gap:10px; color:var(--accent2); }
+
+/* portfolio CTA (PDF) */
+.portfolio-cta {
+  position:relative; margin-top:64px;
+  padding:72px 56px;
+  background:linear-gradient(180deg, var(--bg3) 0%, var(--bg2) 100%);
+  border:1px solid var(--border);
+  border-radius:20px; overflow:hidden; text-align:center;
+}
+.portfolio-cta::before {
+  content:''; position:absolute;
+  top:-40%; left:50%; width:720px; height:720px;
+  transform:translateX(-50%);
+  background:radial-gradient(circle, var(--accent-dim) 0%, transparent 60%);
+  pointer-events:none;
+}
+.portfolio-cta::after {
+  content:''; position:absolute; inset:0; border-radius:20px;
+  padding:1px;
+  background:linear-gradient(180deg, var(--accent-border), transparent 55%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude;
+  pointer-events:none;
+}
+.portfolio-cta-inner { position:relative; z-index:1; max-width:680px; margin:0 auto; }
+.portfolio-cta-eyebrow {
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px; font-weight:500; letter-spacing:3px;
+  text-transform:uppercase; color:var(--accent2);
+  margin-bottom:20px;
+}
+.portfolio-cta h3 {
+  font-family:'Cormorant Garamond',serif;
+  font-size:clamp(32px,4.2vw,46px);
+  font-weight:300; line-height:1.12;
+  letter-spacing:-0.5px; margin-bottom:18px;
+  color:var(--white);
+}
+.portfolio-cta p.body {
+  font-size:15px; font-weight:300; line-height:1.75;
+  color:var(--muted); max-width:520px; margin:0 auto 36px;
+}
+.portfolio-cta-btns {
+  display:flex; gap:14px; justify-content:center; flex-wrap:wrap;
+}
+.portfolio-cta-fine {
+  font-size:12px; color:var(--dim); font-weight:300;
+  margin-top:28px; letter-spacing:0.2px;
+}
+.portfolio-cta-fine a {
+  color:var(--off); text-decoration:none;
+  border-bottom:1px solid var(--border2);
+  transition:color .3s, border-color .3s;
+}
+.portfolio-cta-fine a:hover {
+  color:var(--accent-bright); border-color:var(--accent-border);
+}
+
+/* ============================================
+   INQUIRY
+============================================ */
+.inquiry-section {
+  background:var(--bg2);
+  border-top:1px solid var(--border);
+}
+.form-grid {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:64px; align-items:start; margin-top:48px;
+}
+.form-intro p {
+  font-size:15px; color:var(--muted);
+  line-height:1.85; margin-bottom:24px; font-weight:300;
+}
+.form-intro .note {
+  font-size:13px; color:var(--dim);
+  border-left:2px solid var(--accent-border);
+  padding-left:16px; line-height:1.7; font-weight:300;
+}
+.form-card {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:18px; padding:40px;
+}
+.field { margin-bottom:18px; }
+.field label {
+  display:block; font-size:11px; font-weight:500;
+  color:var(--dim); margin-bottom:6px; letter-spacing:0.5px;
+  text-transform:uppercase;
+}
+.field input, .field select, .field textarea {
+  width:100%; background:var(--bg); border:1px solid var(--border2);
+  color:var(--white); font-family:'Sora',sans-serif;
+  font-size:14px; padding:13px 14px; border-radius:10px;
+  outline:none; transition:border-color .3s, box-shadow .3s;
+  font-weight:300;
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-dim);
+}
+.field textarea { min-height:120px; resize:vertical; }
+.field select {
+  cursor:pointer; appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238A8C97' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 14px center;
+  padding-right:36px;
+}
+.form-submit {
+  width:100%; margin-top:8px;
+  font-family:'Sora',sans-serif; font-size:14px; font-weight:500;
+  color:#fff; background:var(--accent); border:none;
+  padding:15px; border-radius:24px; cursor:pointer;
+  transition:all .4s ease;
+}
+.form-submit:hover {
+  background:var(--accent2);
+  box-shadow:0 8px 24px rgba(77,139,245,0.30);
+  transform:translateY(-1px);
+}
+.form-fine {
+  font-size:10px; color:var(--dim);
+  text-align:center; margin-top:14px; font-weight:300;
+  letter-spacing:0.5px;
+}
+
+/* ============================================
+   FOOTER
+============================================ */
+footer {
+  padding:56px 40px 40px;
+  border-top:1px solid var(--border);
+  background:var(--bg);
+}
+.footer-inner {
+  max-width:1200px; margin:0 auto;
+  display:flex; justify-content:space-between; align-items:center;
+  flex-wrap:wrap; gap:24px;
+}
+.footer-brand { display:flex; align-items:center; gap:12px; }
+.footer-brand img {
+  height:26px;
+}
+.footer-links {
+  display:flex; gap:28px; align-items:center;
+}
+.footer-links a {
+  font-size:12.5px; color:var(--dim);
+  text-decoration:none; transition:color .3s;
+}
+.footer-links a:hover { color:var(--accent-bright); }
+.footer-copy {
+  width:100%; text-align:center;
+  font-size:10.5px; color:var(--dim);
+  margin-top:32px; padding-top:24px;
+  border-top:1px solid var(--border);
+  letter-spacing:0.4px;
+}
+
+/* ============================================
+   MODAL
+============================================ */
+.modal-overlay {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,0.88); z-index:10000;
+  align-items:center; justify-content:center;
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+}
+.modal-overlay.open { display:flex; }
+.modal {
+  background:var(--bg2); border:1px solid var(--border);
+  border-radius:18px; max-width:760px; width:90%;
+  max-height:90vh; overflow-y:auto;
+  padding:40px;
+}
+.modal-close {
+  float:right; font-size:22px;
+  color:var(--dim); cursor:pointer;
+  background:none; border:none;
+  transition:color .3s;
+}
+.modal-close:hover { color:var(--white); }
+.modal-video {
+  width:100%; border-radius:12px;
+  margin:20px 0; overflow:hidden;
+  background:var(--bg3);
+}
+.modal-video video {
+  width:100%; display:block; border-radius:12px;
+}
+.modal-title {
+  font-family:'Cormorant Garamond',serif;
+  font-size:26px; font-weight:300; margin-bottom:6px;
+}
+.modal-desc {
+  font-size:13px; color:var(--dim);
+  margin-bottom:20px; font-weight:300;
+}
+
+/* ============================================
+   REVEAL ANIMATIONS
+============================================ */
+.reveal {
+  opacity:0; transform:translateY(28px);
+  transition:opacity .9s cubic-bezier(.25,1,.5,1), transform .9s cubic-bezier(.25,1,.5,1);
+}
+.reveal.visible { opacity:1; transform:translateY(0); }
+
+/* ============================================
+   RESPONSIVE
+============================================ */
+@media (max-width:960px) {
+  nav { padding:0 20px; }
+  .nav-links { display:none; }
+  .nav-links.open {
+    display:flex; flex-direction:column;
+    position:fixed; inset:0; top:64px;
+    background:var(--nav-bg);
+    backdrop-filter:blur(20px);
+    justify-content:center; align-items:center;
+    gap:32px; z-index:1000;
+    padding:40px;
+  }
+  .nav-links.open a { font-size:22px; }
+  .mobile-toggle { display:flex; }
+  section, .hero, .manifesto { padding-left:20px; padding-right:20px; }
+  .hero { padding-top:120px; padding-bottom:80px; }
+  .tiles-grid { grid-template-columns:repeat(2,1fr); }
+  .flip-grid { grid-template-columns:1fr; }
+  .flip-card { height:auto; min-height:180px; }
+  .flip-card:hover .flip-inner { transform:none; }
+  .flip-inner { transform-style:flat; }
+  .flip-front { position:relative; }
+  .flip-back { position:relative; transform:none; display:none; }
+  .flip-card.flipped .flip-front { display:none; }
+  .flip-card.flipped .flip-back { display:flex; }
+  .form-grid { grid-template-columns:1fr; gap:32px; }
+  .portfolio-grid { grid-template-columns:1fr; }
+  .portfolio-cta { padding:56px 28px; margin-top:48px; }
+  .portfolio-cta-btns { flex-direction:column; align-items:stretch; }
+  .portfolio-cta-btns .btn-accent, .portfolio-cta-btns .btn-outline { width:100%; justify-content:center; }
+  .hero-trust { gap:24px; margin-top:48px; }
+  .footer-inner { flex-direction:column; text-align:center; }
+  .footer-links { justify-content:center; }
+}
+@media (max-width:640px) {
+  .tiles-grid { grid-template-columns:1fr; }
+  .hero h1 { font-size:48px; }
+  .hero-trust-num { font-size:22px; }
+  section { padding:80px 20px; }
+  .form-card { padding:28px 22px; }
+}
+</style>
+</head>
+<body>
+
+<!-- noise overlay -->
+<div class="noise" aria-hidden="true"></div>
+
+<!-- NAV -->
+<nav>
+  <a href="#top" class="nav-brand" onclick="scrollToTop(event)">
+    <img src="assets/logo.png" alt="OneVibeMedia">
+  </a>
+  <div class="nav-links" id="navLinks">
+    <a href="#top" onclick="scrollToTop(event)">Home</a>
+    <a href="#mission">About</a>
+    <a href="#solutions">Services</a>
+    <a href="#portfolio">Portfolio</a>
+    <a href="#contact" class="nav-cta">Contact</a>
+  </div>
+  <div class="mobile-toggle" onclick="document.getElementById('navLinks').classList.toggle('open')"><span></span><span></span><span></span></div>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="top">
+  <div class="hero-bg">
+    <div class="hero-orb orb1"></div>
+    <div class="hero-orb orb2"></div>
+    <div class="hero-orb orb3"></div>
+  </div>
+  <div class="hero-content">
+    <h1>Premium Media &amp;<br>Marketing <span class="gradient">Systems</span></h1>
+    <p class="hero-sub">We build high-performing content ecosystems, brand identities, social systems, SEO foundations, and web experiences that convert &mdash; without noise, pressure, or misalignment.</p>
+    <div class="hero-btns">
+      <a href="#contact" class="btn-accent" onclick="clearForm()">Book a Call <span class="btn-arrow">&rarr;</span></a>
+      <a href="#solutions" class="btn-outline">Explore Solutions</a>
+      <a href="#portfolio" class="btn-outline">Portfolio</a>
     </div>
-  );
-};
+    <div class="hero-trust">
+      <div class="hero-trust-item">
+        <div class="hero-trust-num">4</div>
+        <div class="hero-trust-label">Core Pillars</div>
+      </div>
+      <div class="hero-trust-item">
+        <div class="hero-trust-num">10&ndash;20%</div>
+        <div class="hero-trust-label">Bundle Savings</div>
+      </div>
+      <div class="hero-trust-item">
+        <div class="hero-trust-num">&lt;24h</div>
+        <div class="hero-trust-label">Reply Window</div>
+      </div>
+      <div class="hero-trust-item">
+        <div class="hero-trust-num">100%</div>
+        <div class="hero-trust-label">Custom Built</div>
+      </div>
+    </div>
+  </div>
+</section>
 
-export default AudioQualityPanel;
+<!-- MARQUEE -->
+<div class="marquee">
+  <div class="marquee-track">
+    <span>Web Development</span><span>3D Animation</span><span>Video Production</span><span>SEO Systems</span><span>Social Media</span><span>Brand Ecosystems</span><span>Content Creation</span><span>Enterprise Media</span>
+    <span>Web Development</span><span>3D Animation</span><span>Video Production</span><span>SEO Systems</span><span>Social Media</span><span>Brand Ecosystems</span><span>Content Creation</span><span>Enterprise Media</span>
+  </div>
+</div>
+
+<!-- SOLUTIONS -->
+<section id="solutions">
+  <div class="inner">
+    <div class="s-eyebrow reveal">Our Solutions</div>
+    <h2 class="s-title reveal">Aligned Systems,<br>Not Isolated Services</h2>
+    <p class="s-sub reveal">We design systems that work together &mdash; built to scale with your brand and feel effortless to maintain.</p>
+
+    <div class="bundle-banner reveal">
+      <div class="bundle-icon">%</div>
+      <div class="bundle-text">
+        <strong>Bundle &amp; Save 10&ndash;20%</strong>
+        <p>Combine Web Dev + SEO + Content Creation or any services together. Custom packages available on request.</p>
+      </div>
+    </div>
+
+    <div class="pillar-tabs reveal">
+      <div class="pillar-tab active" onclick="showPillar('web',this)">Web Development</div>
+      <div class="pillar-tab" onclick="showPillar('content',this)">Content Creation</div>
+      <div class="pillar-tab" onclick="showPillar('social',this)">Social Media</div>
+      <div class="pillar-tab" onclick="showPillar('seo',this)">SEO &amp; Growth</div>
+    </div>
+
+    <!-- WEB DEV -->
+    <div class="pillar-content active" id="pillar-web">
+      <div class="tiles-grid">
+        <div class="tile reveal" data-tilt><div class="tile-badge">1 Page</div><div class="tile-name">Starter Site</div><div class="tile-desc">Clean single-page launch</div><ul class="tile-features"><li>Mobile-first, conversion-ready one-page site</li><li>Brand-consistent layout + clear CTA flow</li><li>Basic SEO setup (titles, meta, indexing)</li><li>Launch-ready with fast turnaround</li></ul><div class="tile-price">Starting at $1,199</div><a class="tile-cta" onclick="fillForm('Web Development','Starter Site &mdash; 1 Page')">Contact Us Now</a></div>
+        <div class="tile reveal" data-tilt><div class="tile-badge">3 Pages</div><div class="tile-name">Growth Site</div><div class="tile-desc">Multi-page with stronger structure</div><ul class="tile-features"><li>3-page structure with navigation</li><li>Conversion-focused layout (proof, offer, CTA)</li><li>Speed + SEO foundations built-in</li><li>Built to scale into additional pages</li></ul><div class="tile-price">Starting at $2,499</div><a class="tile-cta" onclick="fillForm('Web Development','Growth Site &mdash; 3 Pages')">Contact Us Now</a></div>
+        <div class="tile reveal" data-tilt><div class="tile-badge">5 Pages</div><div class="tile-name">Brand Platform</div><div class="tile-desc">Premium presence with full story</div><ul class="tile-features"><li>Brand story + positioning pages included</li><li>Stronger conversion journey (multiple CTAs)</li><li>Higher-end visual system + cohesion</li><li>Built to support campaigns + launches</li></ul><div class="tile-price">Starting at $4,999</div><a class="tile-cta" onclick="fillForm('Web Development','Brand Platform &mdash; 5 Pages')">Contact Us Now</a></div>
+        <div class="tile reveal" data-tilt><div class="tile-badge">10 Pages</div><div class="tile-name">Enterprise Site</div><div class="tile-desc">Full-scale digital platform</div><ul class="tile-features"><li>Modular architecture for multiple offers</li><li>Landing-page ready for campaigns</li><li>Built for fast iteration + expansion</li><li>Conversion paths per audience/offer</li></ul><div class="tile-price">Starting at $9,999</div><a class="tile-cta" onclick="fillForm('Web Development','Enterprise Site &mdash; 10 Pages')">Contact Us Now</a></div>
+        <div class="tile reveal" data-tilt><div class="tile-badge">Custom</div><div class="tile-name">Custom Enterprise</div><div class="tile-desc">Enterprise-grade, fully bespoke</div><ul class="tile-features"><li>Custom UX strategy + architecture</li><li>Multi-audience pathways (partners, buyers)</li><li>Scalable design system + governance</li><li>Performance, reliability, handoff built-in</li></ul><div class="tile-price">Custom Pricing</div><a class="tile-cta" onclick="fillForm('Web Development','Custom Enterprise')">Contact Us Now</a></div>
+      </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="pillar-content" id="pillar-content">
+      <div class="tiles-grid">
+        <div class="tile reveal" data-tilt><div class="tile-badge">3D Animation</div><div class="tile-name">3D Essentials</div><div class="tile-desc">Product renders + brand visuals</div><ul class="tile-features"><li>Product renders (CPG, tech, beverage)</li><li>Brand-consistent 3D visual assets</li><li>2 revision rounds included</li><li>Delivery in web + social formats</li></ul><div class="tile-price">Starting at $2,500</div><a class="tile-cta" onclick="fillForm('Content Creation','3D Essentials')">Contact Us Now</a></div>
+        <div class="tile reveal" data-tilt><div class="tile-badge">3D Animation</div><div class="tile-name">3D Premium</div><div class="tile-desc">Animated loops + commercial visuals</div><ul class="tile-features"><li>Animated product loops + sequences</li><li>Commercial-grade renders</li><li>LED-ready visual loops</li><li>Campaign-ready cinematic output</li></ul><div class="tile-price">Starting at $5,000</div><a class="tile-cta" onclick="fillForm('Content Creation','3D Premium')">Contact Us Now</a></div>
+        <div class="tile reveal" data-tilt><div class="tile-badge">Video</div><div class="tile-name">Video Editing</div><div class="tile-desc">Professional edit + delivery</div><ul class="tile-features"><li>Clean professional edits</li><li>Captions, formatting, packaging</li><li>Repurpose long-form into short-form</li><li>Brand-consistent output</li></ul><div class="tile-price">Starting at $1,500 <span>/ project</span></div><a class="tile-cta" onclick="fillForm('Content Creation','Video Editing')">Contact Us Now</a></div>
+        <div class="tile reveal" data-tilt><div class="tile-badge">Video</div><div class="tile-name">Video Production</div><div class="tile-desc">Full creative direction + shoot</div><ul class="tile-features"><li>Story-driven concepts + creative direction</li><li>Signature content for launches</li><li>Cinematic polish + highest quality</li><li>Campaign-ready output</li></ul><div class="tile-price">Starting at $4,800 <span>/ project</span></div><a class="tile-cta" onclick="fillForm('Content Creation','Video Production')">Contact Us Now</a></div>
+      </div>
+
+      <div class="gallery-wrap reveal">
+        <div class="gallery-label">Visual Gallery</div>
+        <div class="gallery-sub">Preview custom 3D visuals and product animations. Click to expand and play.</div>
+        <div class="gallery-scroll">
+          <div class="gallery-card" onclick="openModal('Live Resin &mdash; Product Render','assets/product-video-1.mp4')"><img class="gallery-card-img" src="assets/gallery-product-1.jpg" alt="Live Resin Product Render"><div class="gallery-card-play"></div><div class="gallery-card-label">Live Resin &mdash; 3D Product Render</div><div class="gallery-card-tag">3D Render</div></div>
+          <div class="gallery-card" onclick="openModal('Terp Burst &mdash; Commercial','assets/product-video-2.mp4')"><img class="gallery-card-img" src="assets/gallery-product-2.jpg" alt="Terp Burst Commercial"><div class="gallery-card-play"></div><div class="gallery-card-label">Terp Burst &mdash; 3D Commercial</div><div class="gallery-card-tag">Commercial</div></div>
+          <div class="gallery-card" onclick="openModal('Gold Liquid &mdash; 3D Animation','assets/product-video-3.mp4')"><img class="gallery-card-img" src="assets/gallery-product-3.jpg" alt="Gold Liquid Animation"><div class="gallery-card-play"></div><div class="gallery-card-label">Gold Liquid &mdash; 3D Animation</div><div class="gallery-card-tag">Animation</div></div>
+          <div class="gallery-card" onclick="openModal('Treats &mdash; Brand Reveal','assets/product-video-4.mp4')"><img class="gallery-card-img" src="assets/gallery-product-4.jpg" alt="Treats Brand Reveal"><div class="gallery-card-play"></div><div class="gallery-card-label">Treats &mdash; 3D Brand Reveal</div><div class="gallery-card-tag">Brand Reveal</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SOCIAL -->
+    <div class="pillar-content" id="pillar-social">
+      <div class="tiles-grid">
+        <div class="tile reveal" data-tilt><div class="tile-badge">Foundation</div><div class="tile-name">Social Foundation</div><div class="tile-desc">Launch-ready social structure</div><ul class="tile-features"><li>Profile optimization + brand setup</li><li>Monthly content plan + cadence</li><li>Template system for cohesion</li><li>Baseline metrics + roadmap</li></ul><div class="tile-price">Starting at $1,800 <span>/ month</span></div><a class="tile-cta" onclick="fillForm('Social Media','Social Foundation')">Contact Us Now</a></div>
+        <div class="tile reveal" data-tilt><div class="tile-badge">Growth</div><div class="tile-name">Social Growth</div><div class="tile-desc">Built to grow reach and momentum</div><ul class="tile-features"><li>Growth-focused content strategy</li><li>Higher output + repurposing</li><li>Community engagement support</li><li>Performance review + optimization</li></ul><div class="tile-price">Starting at $3,600 <span>/ month</span></div><a class="tile-cta" onclick="fillForm('Social Media','Social Growth')">Contact Us Now</a></div>
+        <div class="tile reveal" data-tilt><div class="tile-badge">Authority</div><div class="tile-name">Social Authority</div><div class="tile-desc">Premium positioning</div><ul class="tile-features"><li>Thought-leadership positioning</li><li>Signature content + storytelling</li><li>Highest creative direction</li><li>Social &rarr; inquiry conversion</li></ul><div class="tile-price">Starting at $6,000 <span>/ month</span></div><a class="tile-cta" onclick="fillForm('Social Media','Social Authority')">Contact Us Now</a></div>
+      </div>
+    </div>
+
+    <!-- SEO -->
+    <div class="pillar-content" id="pillar-seo">
+      <div class="tiles-grid">
+        <div class="tile reveal" data-tilt><div class="tile-badge">Foundation</div><div class="tile-name">SEO Foundation</div><div class="tile-desc">Get indexed and positioned</div><ul class="tile-features"><li>Technical SEO + site health</li><li>On-page optimization</li><li>Keyword targeting + mapping</li><li>Search Console + quick wins</li></ul><div class="tile-price">Starting at $1,500 <span>/ month</span></div><a class="tile-cta" onclick="fillForm('SEO &amp; Growth','SEO Foundation')">Contact Us Now</a></div>
+        <div class="tile reveal" data-tilt><div class="tile-badge">Momentum</div><div class="tile-name">SEO Momentum</div><div class="tile-desc">Optimization that compounds</div><ul class="tile-features"><li>Continuous on-page improvements</li><li>Content strategy + page additions</li><li>Internal linking + structure</li><li>Monthly reporting + iteration</li></ul><div class="tile-price">Starting at $3,000 <span>/ month</span></div><a class="tile-cta" onclick="fillForm('SEO &amp; Growth','SEO Momentum')">Contact Us Now</a></div>
+        <div class="tile reveal" data-tilt><div class="tile-badge">Authority</div><div class="tile-name">SEO Authority</div><div class="tile-desc">Aggressive competitive growth</div><ul class="tile-features"><li>Authority-building strategy</li><li>High-output content + optimization</li><li>Competitive SERP targeting</li><li>Deep reporting + growth roadmap</li></ul><div class="tile-price">Starting at $6,000 <span>/ month</span></div><a class="tile-cta" onclick="fillForm('SEO &amp; Growth','SEO Authority')">Contact Us Now</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MANIFESTO -->
+<div class="manifesto">
+  <p class="manifesto-text reveal">Bring your vibe.<br>We'll bring the <em>value.</em></p>
+</div>
+
+<!-- MISSION / VISION / PORTFOLIO -->
+<section id="mission" class="flip-section">
+  <div class="inner">
+    <div class="s-eyebrow reveal">Who We Are</div>
+    <h2 class="s-title reveal">Mission, Vision &amp; Portfolio</h2>
+    <div class="flip-grid">
+      <div class="flip-card reveal" onclick="this.classList.toggle('flipped')"><div class="flip-inner"><div class="flip-front"><h3>Our Mission</h3><p>Hover or tap to reveal</p></div><div class="flip-back"><p>Our mission is to help activate as many people as possible &mdash; by enhancing their online presence, strengthening their businesses, and supporting them in stepping fully into their highest potential.</p></div></div></div>
+      <div class="flip-card reveal" onclick="this.classList.toggle('flipped')"><div class="flip-inner"><div class="flip-front"><h3>Our Vision</h3><p>Hover or tap to reveal</p></div><div class="flip-back"><p>Our vision is to support people in living and building on the highest timeline available to them. Everything we create is rooted in lessons learned from building our own companies and navigating real growth firsthand.</p></div></div></div>
+      <div class="flip-card reveal" onclick="this.classList.toggle('flipped')"><div class="flip-inner"><div class="flip-front"><h3>Our Portfolio</h3><p>Hover or tap to reveal</p></div><div class="flip-back"><p>We believe quality speaks for itself. Explore our work to see the execution and intention we bring to every project.</p><a href="#portfolio">View Our Portfolio</a></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PORTFOLIO (3 site cards) -->
+<section id="portfolio">
+  <div class="inner">
+    <div class="s-eyebrow reveal">Our Work</div>
+    <h2 class="s-title reveal">Portfolio</h2>
+    <p class="s-sub reveal">Live website builds &mdash; explore them and see exactly what we deliver.</p>
+
+    <div class="portfolio-grid">
+      <!-- SITE 1 — DockBridge -->
+      <a class="site-card reveal" href="https://dockbridge.io" target="_blank" rel="noopener">
+        <div class="site-frame">
+          <div class="site-chrome"><span></span><span></span><span></span><div class="url">dockbridge.io</div></div>
+          <img class="site-img" src="assets/dockbridge.jpg" alt="DockBridge">
+        </div>
+        <div class="site-info">
+          <div class="site-info-tag">SaaS Platform</div>
+          <h4>DockBridge</h4>
+          <p>Modern warehouse management software &mdash; real-time order tracking, visual pipelines, and team collaboration built for 3PLs and fulfillment centers.</p>
+          <span class="site-link">Visit Site <span>&rarr;</span></span>
+        </div>
+      </a>
+
+      <!-- SITE 2 — InItPic -->
+      <a class="site-card reveal" href="https://initpic.com" target="_blank" rel="noopener">
+        <div class="site-frame">
+          <div class="site-chrome"><span></span><span></span><span></span><div class="url">initpic.com</div></div>
+          <img class="site-img" src="assets/initpic.jpg" alt="InItPic">
+        </div>
+        <div class="site-info">
+          <div class="site-info-tag">AI Platform</div>
+          <h4>InItPic</h4>
+          <p>AI-powered event photo discovery &mdash; one selfie surfaces every photo you appear in across festivals, weddings, and concerts with 98% match accuracy.</p>
+          <span class="site-link">Visit Site <span>&rarr;</span></span>
+        </div>
+      </a>
+
+      <!-- SITE 3 — Lily CRM -->
+      <a class="site-card reveal" href="https://lilycrm.com" target="_blank" rel="noopener">
+        <div class="site-frame">
+          <div class="site-chrome"><span></span><span></span><span></span><div class="url">lilycrm.com</div></div>
+          <img class="site-img" src="assets/lilycrm.jpg" alt="Lily CRM">
+        </div>
+        <div class="site-info">
+          <div class="site-info-tag">Custom Software</div>
+          <h4>Lily CRM</h4>
+          <p>Custom CRM development for US businesses &mdash; systems engineered around real workflows, integrations, and growth goals, not generic templates.</p>
+          <span class="site-link">Visit Site <span>&rarr;</span></span>
+        </div>
+      </a>
+    </div>
+
+    <!-- PDF CTA -->
+    <div class="portfolio-cta reveal">
+      <div class="portfolio-cta-inner">
+        <div class="portfolio-cta-eyebrow">Featured Deck</div>
+        <h3>Explore the Full Creative Portfolio</h3>
+        <p class="body">A 10-page overview of our web, visual, event, media, and digital ecosystem work.</p>
+        <div class="portfolio-cta-btns">
+          <a class="btn-accent" href="assets/OVMG-Creative-Portfolio.pdf" target="_blank" rel="noopener">View Portfolio <span class="btn-arrow">&rarr;</span></a>
+          <a class="btn-outline" href="assets/OVMG-Creative-Portfolio.pdf" download="OVMG-Creative-Portfolio.pdf">Download PDF</a>
+        </div>
+        <p class="portfolio-cta-fine">Need a custom scope, deck, or media package? <a href="#contact">Contact us for a tailored proposal.</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT -->
+<section id="contact" class="inquiry-section">
+  <div class="inner">
+    <div class="s-eyebrow reveal">Let's Connect</div>
+    <h2 class="s-title reveal">Ready to Build Something?</h2>
+    <p class="s-sub reveal">Whether you need a website, content, SEO, or a full digital ecosystem &mdash; we'd love to hear about your project.</p>
+    <div class="form-grid">
+      <div class="form-intro reveal">
+        <p>Tell us about your project, goals, and where you're at. We'll respond with clarity on whether we're the right fit and what a path forward could look like.</p>
+        <div class="note">No pressure. No pitch. Just a real conversation about what's possible. Custom packages and bundle discounts available.</div>
+      </div>
+      <div class="form-card reveal">
+        <form id="inquiryForm" onsubmit="handleInquiry(event)">
+          <div class="field"><label>Full Name</label><input type="text" name="name" required placeholder="Your name"></div>
+          <div class="field"><label>Email</label><input type="email" name="email" required placeholder="you@company.com"></div>
+          <div class="field"><label>Company / Brand</label><input type="text" name="company" placeholder="Company name"></div>
+          <div class="field"><label>Category</label><select id="formCategory" name="category"><option value="">Select a category</option><option>Web Development</option><option>Content Creation</option><option>Social Media</option><option>SEO &amp; Growth</option><option>Visual Gallery / Custom Visuals</option><option>Bundle / Multiple Services</option><option>Other</option></select></div>
+          <div class="field"><label>Package</label><select id="formPackage" name="package"><option value="">Select a package (optional)</option><option>Starter Site &mdash; 1 Page</option><option>Growth Site &mdash; 3 Pages</option><option>Brand Platform &mdash; 5 Pages</option><option>Enterprise Site &mdash; 10 Pages</option><option>Custom Enterprise</option><option>3D Essentials</option><option>3D Premium</option><option>Video Editing</option><option>Video Production</option><option>Social Foundation</option><option>Social Growth</option><option>Social Authority</option><option>SEO Foundation</option><option>SEO Momentum</option><option>SEO Authority</option><option>Custom Visuals</option><option>Other</option></select></div>
+          <div class="field"><label>Detailed Inquiry</label><textarea name="message" placeholder="Tell us about your project, goals, timeline..."></textarea></div>
+          <button type="submit" class="form-submit">Send Inquiry</button>
+          <p class="form-fine">CONFIDENTIAL &middot; WE RESPOND WITHIN 24 HOURS</p>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img src="assets/logo.png" alt="OneVibeMedia">
+    </div>
+    <div class="footer-links">
+      <a href="#solutions">Services</a>
+      <a href="#portfolio">Portfolio</a>
+      <a href="#mission">About</a>
+      <a href="#contact">Contact</a>
+    </div>
+    <div class="footer-copy">&copy; 2026 OneVibeMedia. All rights reserved.</div>
+  </div>
+</footer>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="closeModalDirect()">&times;</button>
+    <div class="modal-video">
+      <video id="modalPlayer" autoplay loop muted playsinline controls></video>
+    </div>
+    <div class="modal-title" id="modalTitle">Visual Title</div>
+    <div class="modal-desc" id="modalDesc">Custom 3D visual by OneVibeMedia.</div>
+    <a class="tile-cta" onclick="fillForm('Visual Gallery / Custom Visuals','Custom Visuals')" style="display:inline-block;margin-top:12px;max-width:280px">Contact Us About This Visual</a>
+  </div>
+</div>
+
+<script>
+/* ===== REVEAL ===== */
+var obs = new IntersectionObserver(function(entries){
+  entries.forEach(function(e){
+    if (e.isIntersecting) e.target.classList.add('visible');
+  });
+}, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+document.querySelectorAll('.reveal').forEach(function(el){ obs.observe(el); });
+
+/* ===== SMOOTH SCROLL ===== */
+document.querySelectorAll('a[href^="#"]').forEach(function(a){
+  a.addEventListener('click', function(e){
+    var href = a.getAttribute('href');
+    if (!href || href === '#') return;
+    var t = document.querySelector(href);
+    if (t) {
+      e.preventDefault();
+      t.scrollIntoView({behavior:'smooth'});
+      document.getElementById('navLinks').classList.remove('open');
+    }
+  });
+});
+function scrollToTop(e){
+  if (e) e.preventDefault();
+  window.scrollTo({top:0, behavior:'smooth'});
+  document.getElementById('navLinks').classList.remove('open');
+}
+
+/* ===== PILLAR TABS ===== */
+function showPillar(id, el){
+  document.querySelectorAll('.pillar-tab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.pillar-content').forEach(function(c){ c.classList.remove('active'); });
+  document.getElementById('pillar-'+id).classList.add('active');
+  el.classList.add('active');
+  document.querySelectorAll('#pillar-'+id+' .reveal:not(.visible)').forEach(function(el){ obs.observe(el); });
+}
+
+/* ===== FORM ===== */
+function fillForm(cat, pkg){
+  var c = document.getElementById('formCategory');
+  var p = document.getElementById('formPackage');
+  if (cat) {
+    for (var i=0;i<c.options.length;i++) {
+      if (c.options[i].textContent === cat || c.options[i].textContent.indexOf(cat.replace(/&mdash;/g,'—')) > -1) {
+        c.value = c.options[i].value; break;
+      }
+    }
+  }
+  if (pkg) {
+    var target = pkg.replace(/&mdash;/g,'—').replace(/&amp;/g,'&');
+    for (var j=0;j<p.options.length;j++) {
+      if (p.options[j].textContent === target) { p.value = p.options[j].value; break; }
+    }
+  }
+  document.getElementById('contact').scrollIntoView({behavior:'smooth'});
+  document.getElementById('navLinks').classList.remove('open');
+}
+function clearForm(){
+  var c = document.getElementById('formCategory');
+  var p = document.getElementById('formPackage');
+  if (c) c.value = '';
+  if (p) p.value = '';
+}
+function handleInquiry(e){
+  e.preventDefault();
+  var f = e.target;
+  console.log('Inquiry:', Object.fromEntries(new FormData(f)));
+  f.innerHTML = '<div style="text-align:center;padding:48px 0"><div style="font-family:Cormorant Garamond,serif;font-size:30px;font-weight:300;margin-bottom:10px">Inquiry Received</div><p style="color:var(--muted);font-size:14px;font-weight:300">We\'ll be in touch within 24 hours.</p></div>';
+}
+
+/* ===== MODAL ===== */
+function openModal(title, src){
+  document.getElementById('modalTitle').innerHTML = title;
+  document.getElementById('modalDesc').textContent = 'Custom 3D visual by OneVibeMedia.';
+  var p = document.getElementById('modalPlayer');
+  p.src = src; p.play();
+  document.getElementById('modalOverlay').classList.add('open');
+}
+function closeModalDirect(){
+  document.getElementById('modalOverlay').classList.remove('open');
+  var p = document.getElementById('modalPlayer');
+  p.pause(); p.removeAttribute('src'); p.load();
+}
+function closeModal(e){
+  if (e.target === document.getElementById('modalOverlay')) closeModalDirect();
+}
+
+/* ===== TILE SPOTLIGHT ===== */
+document.querySelectorAll('.tile').forEach(function(tile){
+  tile.addEventListener('mousemove', function(e){
+    var r = tile.getBoundingClientRect();
+    var x = ((e.clientX - r.left) / r.width) * 100;
+    var y = ((e.clientY - r.top) / r.height) * 100;
+    tile.style.setProperty('--mx', x + '%');
+    tile.style.setProperty('--my', y + '%');
+  });
+});
+</script>
+
+</body>
+</html>
