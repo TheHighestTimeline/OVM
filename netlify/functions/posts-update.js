@@ -1,10 +1,11 @@
-// posts-update — forwards to Supabase (same as posts-upsert with an id).
-// Social.jsx calls this endpoint directly to update post status etc.
+// posts-update — updates a post in Airtable by record ID
 import { ok, err, CORS } from './_notion.js';
 import { requireAuth } from './_auth.js';
-import { getSupabase } from './_supabase.js';
+import { airtableUpdate, fromAirtableRecord, POSTS_MAP } from './_airtable.js';
 
-const VALID_STATUSES = new Set(['draft','pending_review','approved','rejected','scheduled','posted']);
+const VALID_STATUSES = new Set(['draft','pending_review','pending_client_approval',
+                                 'client_approved','changes_requested',
+                                 'approved','scheduled','posted','failed']);
 
 export const handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
@@ -15,18 +16,32 @@ export const handler = async (event) => {
   if (body.status && !VALID_STATUSES.has(body.status)) return err(400, `Invalid status: ${body.status}`);
 
   try {
-    const supabase = getSupabase();
-    const payload  = {};
-    if (body.status       !== undefined) payload.status       = body.status;
-    if (body.caption      !== undefined) payload.caption      = body.caption;
-    if (body.hashtags     !== undefined) payload.hashtags     = body.hashtags;
-    if (body.scheduled_at !== undefined) payload.scheduled_at = body.scheduled_at;
-    if (body.media_urls   !== undefined) payload.media_urls   = body.media_urls;
-    if (body.tags         !== undefined) payload.tags         = body.tags;
+    const fields = {};
+    if (body.status               !== undefined) fields[POSTS_MAP.status]             = body.status;
+    if (body.caption              !== undefined) fields[POSTS_MAP.caption]             = body.caption;
+    if (body.hashtags             !== undefined) fields[POSTS_MAP.hashtags]            = body.hashtags;
+    if (body.asset_url            !== undefined) fields[POSTS_MAP.assetUrl]            = body.asset_url;
+    if (body.scheduled_at         !== undefined) fields[POSTS_MAP.scheduledAt]         = body.scheduled_at;
+    if (body.approval_token       !== undefined) fields[POSTS_MAP.approvalToken]       = body.approval_token;
+    if (body.client_approval_note !== undefined) fields[POSTS_MAP.clientApprovalNote]  = body.client_approval_note;
+    if (body.reminder_sent        !== undefined) fields[POSTS_MAP.reminderSent]        = body.reminder_sent;
 
-    const { data, error } = await supabase.from('posts').update(payload).eq('id', body.id).select().single();
-    if (error) throw error;
-    return ok({ id: data.id, ...data });
+    const record = await airtableUpdate('Posts', body.id, fields);
+    const post   = fromAirtableRecord(record, POSTS_MAP);
+
+    return ok({
+      id:                   post.id,
+      client_id:            post.clientId,
+      platform:             post.platform,
+      status:               post.status,
+      scheduled_at:         post.scheduledAt,
+      caption:              post.caption,
+      hashtags:             post.hashtags,
+      asset_url:            post.assetUrl,
+      approval_token:       post.approvalToken,
+      client_approval_note: post.clientApprovalNote,
+      reminder_sent:        post.reminderSent,
+    });
   } catch (e) {
     console.error('[posts-update]', e.message);
     return err(500, e.message);

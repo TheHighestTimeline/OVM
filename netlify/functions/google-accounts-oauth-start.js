@@ -4,16 +4,16 @@
 //
 // Flow:
 //   1. Dashboard POSTs here with the calling user's JWT
-//   2. We mint a random `state` token, store it in oauth_state table tied to
+//   2. We mint a random `state` token, store it in OAuth State table tied to
 //      the user (so the callback can verify CSRF + know who initiated)
 //   3. Return the Google OAuth consent URL
 //   4. Dashboard opens that URL in a popup or new tab
 //   5. User consents → Google redirects to the callback function
-//   6. Callback exchanges the code for tokens, stores in user_google_accounts
+//   6. Callback exchanges the code for tokens, stores in Google Accounts table
 
 import { ok, err, CORS } from './_notion.js';
 import { requireAuth, getUser } from './_auth.js';
-import { getSupabase } from './_supabase.js';
+import { airtableCreate, airtableList, airtableDelete, OAUTH_STATE_MAP } from './_airtable.js';
 import { makeOAuthClient, REQUESTED_SCOPES, getRedirectUri } from './_google.js';
 import crypto from 'crypto';
 
@@ -32,21 +32,25 @@ export const handler = async (event) => {
 
     // CSRF state token — also used to identify the initiating user in the callback.
     const state = crypto.randomBytes(24).toString('hex');
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
 
-    const supabase = getSupabase();
+    // Clean up expired state tokens (fire and forget)
+    airtableList('OAuth State', {
+      filterByFormula: `{${OAUTH_STATE_MAP.expiresAt}} < '${new Date(Date.now() - 86400000).toISOString()}'`,
+      maxRecords: 50,
+    }).then(old => {
+      old.forEach(r => airtableDelete('OAuth State', r.id).catch(() => {}));
+    }).catch(() => {});
 
-    supabase.from('oauth_state').delete()
-      .lt('expires_at', new Date(Date.now() - 86400000).toISOString())
-      .then(() => {}, () => {});
-
-    const { error } = await supabase
-      .from('oauth_state')
-      .insert({ state, user_id: user.id });
-    if (error) throw error;
+    await airtableCreate('OAuth State', {
+      [OAUTH_STATE_MAP.state]:     state,
+      [OAUTH_STATE_MAP.userId]:    user.id,
+      [OAUTH_STATE_MAP.expiresAt]: expiresAt,
+    });
 
     const client = makeOAuthClient();
     const url = client.generateAuthUrl({
-      access_type: 'offline',                 // get a refresh_token
+      access_type: 'offline',
       // 'select_account' ALWAYS shows Google's account chooser so you can pick
       // which Gmail to connect, instead of silently reusing the one you're
       // already signed into. 'consent' still forces a refresh_token.

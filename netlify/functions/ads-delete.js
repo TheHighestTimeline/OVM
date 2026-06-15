@@ -1,23 +1,21 @@
 import { getUser } from './_auth.js';
-import { getSupabase } from './_supabase.js';
+import { airtableDelete } from './_airtable.js';
 import { CORS } from './_notion.js';
 
-const ok = (body) => ({ statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-const err = (msg, code = 500) => ({ statusCode: code, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: msg }) });
+const ok  = b => ({ statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+const err = (m, c=500) => ({ statusCode: c, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: m }) });
 
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS };
   const user = await getUser(event);
   if (!user) return err('Unauthorized', 401);
 
-  const { id } = JSON.parse(event.body || '{}');
+  const id = event.queryStringParameters?.id;
   if (!id) return err('id required', 400);
 
   try {
-    const sb = getSupabase();
-    const { error } = await sb.from('ads').delete().eq('id', id);
-    if (error) throw error;
-    return ok({ ok: true });
+    await airtableDelete('Ads', id);
+    return ok({ deleted: true });
   } catch (e) {
     return err(e.message);
   }

@@ -1,9 +1,9 @@
 import { getUser } from './_auth.js';
-import { getSupabase } from './_supabase.js';
+import { airtableList } from './_airtable.js';
 import { CORS } from './_notion.js';
 
-const ok = (body) => ({ statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-const err = (msg, code = 500) => ({ statusCode: code, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: msg }) });
+const ok  = b => ({ statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+const err = (m, c=500) => ({ statusCode: c, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: m }) });
 
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS };
@@ -14,10 +14,18 @@ export async function handler(event) {
   if (!clientId) return err('clientId required', 400);
 
   try {
-    const sb = getSupabase();
-    const { data, error } = await sb.from('client_platforms').select('*').eq('client_id', clientId);
-    if (error) throw error;
-    return ok({ platforms: data || [] });
+    const records = await airtableList('Client Platforms', {
+      filterByFormula: `{Client ID} = '${clientId}'`,
+    });
+    const platforms = records.map(r => ({
+      id:         r.id,
+      client_id:  r.fields['Client ID']  || '',
+      platform:   r.fields['Platform']   || '',
+      handle:     r.fields['Handle']     || '',
+      followers:  r.fields['Followers']  || null,
+      enabled:    r.fields['Enabled']    !== false,
+    }));
+    return ok({ platforms });
   } catch (e) {
     return err(e.message);
   }

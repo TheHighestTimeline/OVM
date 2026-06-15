@@ -335,3 +335,87 @@ export const NOTES_MAP = {
   summary: 'AI Summary',
   type:    'Type',
 };
+
+// ── Posts table ───────────────────────────────────────────────────────────────
+// Airtable table name: "Posts"
+// Create these fields in your Airtable base:
+//   Caption            Long text
+//   Hashtags           Long text
+//   Platform           Single select  (instagram, tiktok, facebook, youtube, threads)
+//   Type               Single select  (photo, video, carousel, reel, short, story, quote)
+//   Asset URL          URL
+//   Status             Single select  (draft, pending_review, pending_client_approval,
+//                                      client_approved, changes_requested,
+//                                      approved, scheduled, posted, failed)
+//   Scheduled At       Date  (include time)
+//   Client ID          Single line text
+//   Approval Token     Single line text
+//   Client Approval Note  Long text
+//   Reminder Sent      Checkbox
+export const POSTS_MAP = {
+  clientId:           'Client ID',
+  platform:           'Platform',
+  type:               'Type',
+  caption:            'Caption',
+  hashtags:           'Hashtags',
+  assetUrl:           'Asset URL',
+  status:             'Status',
+  scheduledAt:        'Scheduled At',
+  approvalToken:      'Approval Token',
+  clientApprovalNote: 'Client Approval Note',
+  reminderSent:       'Reminder Sent',
+};
+
+// ── Approval Sessions table ───────────────────────────────────────────────────
+// Airtable table name: "Approval Sessions"
+// Create these fields:
+//   Token          Single line text  (primary field)
+//   Session Data   Long text         (stores full JSON blob)
+//   Status         Single select     (pending, partial, complete)
+//   Client Name    Single line text
+//   Client ID      Single line text
+export const APPROVAL_SESSIONS_MAP = {
+  token:       'Token',
+  sessionData: 'Session Data',
+  status:      'Status',
+  clientName:  'Client Name',
+  clientId:    'Client ID',
+};
+
+// ── Google Accounts table ─────────────────────────────────────────────────────
+// Airtable table name: "Google Accounts"
+// Create these fields:
+//   User ID        Single line text  (primary field — Clerk user ID)
+//   Email          Email
+//   Display Name   Single line text
+//   Avatar URL     URL
+//   Refresh Token  Long text
+//   Access Token   Long text
+//   Access Expires Single line text  (ISO date string)
+//   Scopes         Long text         (JSON array string)
+//   Is Active      Checkbox
+//   Last Used At   Single line text  (ISO date string)
+export const GOOGLE_ACCOUNTS_MAP = {
+  userId:        'User ID',
+  email:         'Email',
+  displayName:   'Display Name',
+  avatarUrl:     'Avatar URL',
+  refreshToken:  'Refresh Token',
+  accessToken:   'Access Token',
+  accessExpires: 'Access Expires',
+  scopes:        'Scopes',
+  isActive:      'Is Active',
+  lastUsedAt:    'Last Used At',
+};
+
+// ── OAuth State table ─────────────────────────────────────────────────────────
+// Airtable table name: "OAuth State"
+// Create these fields:
+//   State       Single line text  (primary field — random hex token)
+//   User ID     Single line text  (Clerk user ID)
+//   Expires At  Single line text  (ISO date string)
+export const OAUTH_STATE_MAP = {
+  state:     'State',
+  userId:    'User ID',
+  expiresAt: 'Expires At',
+};

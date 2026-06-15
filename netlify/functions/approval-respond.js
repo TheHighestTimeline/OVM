@@ -1,6 +1,5 @@
-// approval-respond.js
-// Public (no auth) — client submits their approve/changes decisions.
-import { getSupabase } from './_supabase.js';
+// approval-respond — public (no auth) — client submits approve/changes decisions
+import { airtableFindByField, airtableUpdate, APPROVAL_SESSIONS_MAP, POSTS_MAP } from './_airtable.js';
 import { ok, err, CORS } from './_notion.js';
 
 export const handler = async (event) => {
@@ -11,53 +10,50 @@ export const handler = async (event) => {
   try { body = JSON.parse(event.body || '{}'); } catch { return err(400, 'Invalid JSON'); }
 
   const { token, responses } = body;
-  // responses: [{ postId, decision: 'approved'|'changes', note }]
   if (!token || !Array.isArray(responses)) return err(400, 'Invalid payload');
 
   try {
-    const sb = getSupabase();
+    // 1. Find the approval session record
+    const records = await airtableFindByField('Approval Sessions', APPROVAL_SESSIONS_MAP.token, token);
+    if (!records.length) return err(404, 'Approval not found');
 
-    // Load session
-    const { data, error } = await sb
-      .from('app_state')
-      .select('value')
-      .eq('key', `approval:${token}`)
-      .single();
+    const sessionRecord = records[0];
+    const raw     = sessionRecord.fields?.[APPROVAL_SESSIONS_MAP.sessionData];
+    const session = raw ? JSON.parse(raw) : null;
+    if (!session) return err(404, 'Session data missing');
 
-    if (error || !data) return err(404, 'Approval not found');
-
-    const session = data.value;
     if (session.status === 'complete') return ok({ message: 'Already submitted' });
 
-    // Merge responses into session
+    // 2. Merge responses into session
     const responseMap = Object.fromEntries(responses.map(r => [r.postId, r]));
     session.posts = session.posts.map(p => {
       const r = responseMap[p.id];
       return r ? { ...p, decision: r.decision, note: r.note || '' } : p;
     });
 
-    const allDecided = session.posts.every(p => p.decision !== null);
-    session.status     = allDecided ? 'complete' : 'partial';
+    const allDecided    = session.posts.every(p => p.decision !== null);
+    session.status      = allDecided ? 'complete' : 'partial';
     session.respondedAt = new Date().toISOString();
 
-    // Save updated session
-    await sb
-      .from('app_state')
-      .update({ value: session })
-      .eq('key', `approval:${token}`);
+    // 3. Save updated session back to Airtable
+    await airtableUpdate('Approval Sessions', sessionRecord.id, {
+      [APPROVAL_SESSIONS_MAP.sessionData]: JSON.stringify(session),
+      [APPROVAL_SESSIONS_MAP.status]:      session.status,
+    });
 
-    // Update individual post statuses in posts table
+    // 4. Update each post's status + note in Airtable
     for (const r of responses) {
       if (!r.postId) continue;
       const newStatus = r.decision === 'approved' ? 'client_approved' : 'changes_requested';
-      await sb
-        .from('posts')
-        .update({ status: newStatus, client_approval_note: r.note || null })
-        .eq('id', r.postId);
+      await airtableUpdate('Posts', r.postId, {
+        [POSTS_MAP.status]:             newStatus,
+        [POSTS_MAP.clientApprovalNote]: r.note || '',
+      });
     }
 
     return ok({ success: true, status: session.status });
   } catch (e) {
+    console.error('[approval-respond]', e.message);
     return err(500, e.message);
   }
 };

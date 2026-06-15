@@ -1,9 +1,9 @@
 import { getUser } from './_auth.js';
-import { getSupabase } from './_supabase.js';
+import { airtableList } from './_airtable.js';
 import { CORS } from './_notion.js';
 
-const ok = (body) => ({ statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-const err = (msg, code = 500) => ({ statusCode: code, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: msg }) });
+const ok  = b => ({ statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+const err = (m, c=500) => ({ statusCode: c, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: m }) });
 
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS };
@@ -14,10 +14,26 @@ export async function handler(event) {
   if (!clientId) return err('clientId required', 400);
 
   try {
-    const sb = getSupabase();
-    const { data, error } = await sb.from('ads').select('*').eq('client_id', clientId).order('created_at', { ascending: false });
-    if (error) throw error;
-    return ok({ ads: data || [] });
+    const records = await airtableList('Ads', {
+      filterByFormula: `{Client ID} = '${clientId}'`,
+      sort: [{ field: 'Created At', direction: 'desc' }],
+    });
+    const ads = records.map(r => ({
+      id:          r.id,
+      client_id:   r.fields['Client ID'],
+      name:        r.fields['Name']        || '',
+      platform:    r.fields['Platform']    || '',
+      type:        r.fields['Type']        || '',
+      status:      r.fields['Status']      || 'draft',
+      budget:      r.fields['Budget']      || null,
+      spend:       r.fields['Spend']       || null,
+      impressions: r.fields['Impressions'] || null,
+      clicks:      r.fields['Clicks']      || null,
+      asset_url:   r.fields['Asset URL']   || '',
+      notes:       r.fields['Notes']       || '',
+      created_at:  r.fields['Created At']  || r.fields['Created time'] || null,
+    }));
+    return ok({ ads });
   } catch (e) {
     return err(e.message);
   }

@@ -1,7 +1,5 @@
-// approval-get.js
-// Public (no auth) — returns approval session for a given token.
-// Used by the client-facing approval page.
-import { getSupabase } from './_supabase.js';
+// approval-get — public (no auth) — returns approval session for a token
+import { airtableFindByField, APPROVAL_SESSIONS_MAP } from './_airtable.js';
 import { ok, err, CORS } from './_notion.js';
 
 export const handler = async (event) => {
@@ -11,21 +9,18 @@ export const handler = async (event) => {
   if (!token) return err(400, 'Missing token');
 
   try {
-    const sb = getSupabase();
-    const { data, error } = await sb
-      .from('app_state')
-      .select('value')
-      .eq('key', `approval:${token}`)
-      .single();
+    const records = await airtableFindByField('Approval Sessions', APPROVAL_SESSIONS_MAP.token, token);
+    if (!records.length) return err(404, 'Approval not found');
 
-    if (error || !data) return err(404, 'Approval not found');
+    const raw     = records[0].fields?.[APPROVAL_SESSIONS_MAP.sessionData];
+    const session = raw ? JSON.parse(raw) : null;
+    if (!session) return err(404, 'Approval session data missing');
 
-    // Return the session without exposing the phone number to the client
-    const session = data.value;
+    // Strip phone number — clients don't need it
     const { clientPhone: _removed, ...safe } = session;
-
     return ok(safe);
   } catch (e) {
+    console.error('[approval-get]', e.message);
     return err(500, e.message);
   }
 };

@@ -1,7 +1,7 @@
 // google-accounts-oauth-callback — Phase 8.
 // Google redirects here after the user consents (or denies). Exchanges the
 // auth code for tokens, fetches the user's Google profile to know which email
-// just connected, stores everything in user_google_accounts.
+// just connected, stores everything in Google Accounts table.
 //
 // Returns an HTML page that closes the popup (or redirects back to the
 // dashboard if not in a popup). Errors render as an HTML error page so the
@@ -9,10 +9,13 @@
 //
 // Note: this function is NOT auth-protected by Clerk because Google calls it
 // without our session JWT. CSRF protection comes from the `state` token we
-// minted in google-accounts-oauth-start and stored in oauth_state.
+// minted in google-accounts-oauth-start and stored in OAuth State table.
 
 import { CORS } from './_notion.js';
-import { getSupabase } from './_supabase.js';
+import {
+  airtableList, airtableCreate, airtableUpdate, airtableDelete,
+  GOOGLE_ACCOUNTS_MAP, OAUTH_STATE_MAP,
+} from './_airtable.js';
 import { makeOAuthClient } from './_google.js';
 import { google } from 'googleapis';
 
@@ -38,8 +41,6 @@ h1{font-family:Georgia,serif;font-weight:500;font-size:24px;margin:0 0 12px}
 }
 
 function successPage(email) {
-  // Closes the popup if opened as one. Otherwise just shows a confirmation
-  // that the user can close.
   return htmlResponse(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Google account connected</title>
 <style>body{font:14px -apple-system,BlinkMacSystemFont,sans-serif;padding:40px;background:#fbf8f2;color:#0e1014;text-align:center}
@@ -53,7 +54,6 @@ h1{font-family:Georgia,serif;font-weight:500;font-size:22px;margin:0 0 8px}
 <div class="email">${email.replace(/[<>]/g, '')}</div>
 <div class="note">You can close this tab. The dashboard will pick up the new account on next page load.</div>
 <script>
-  // If we were opened as a popup, signal the opener + close.
   if (window.opener) {
     try { window.opener.postMessage({ type: 'ovmg.google.account.connected', email: ${JSON.stringify(email)} }, '*'); } catch(e) {}
     setTimeout(() => window.close(), 1200);
@@ -63,35 +63,29 @@ h1{font-family:Georgia,serif;font-weight:500;font-size:22px;margin:0 0 8px}
 }
 
 export const handler = async (event) => {
-  // Parse query string params (Google sends them via GET redirect)
   const params = event.queryStringParameters || {};
   const code  = params.code;
   const state = params.state;
   const error = params.error;
 
-  if (error) {
-    return errorPage(`Google returned: ${error}`);
-  }
-  if (!code || !state) {
-    return errorPage('Missing code or state parameter from Google.');
-  }
+  if (error) return errorPage(`Google returned: ${error}`);
+  if (!code || !state) return errorPage('Missing code or state parameter from Google.');
 
   try {
-    const supabase = getSupabase();
-
     // CSRF check — state must exist + not expired + tied to a user
-    const { data: stateRow, error: stateErr } = await supabase
-      .from('oauth_state')
-      .select('*')
-      .eq('state', state)
-      .single();
-    if (stateErr || !stateRow) {
+    const stateRecords = await airtableList('OAuth State', {
+      filterByFormula: `{${OAUTH_STATE_MAP.state}} = '${state.replace(/'/g, "\\'")}'`,
+      maxRecords: 1,
+    });
+    const stateRow = stateRecords[0];
+    if (!stateRow) {
       return errorPage('OAuth state token invalid or expired. Start the connection again from the dashboard.');
     }
-    if (new Date(stateRow.expires_at).getTime() < Date.now()) {
+    const expiresAt = stateRow.fields[OAUTH_STATE_MAP.expiresAt];
+    if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
       return errorPage('OAuth state token expired. Start the connection again.');
     }
-    const userId = stateRow.user_id;
+    const userId = stateRow.fields[OAUTH_STATE_MAP.userId];
 
     // Exchange the code for tokens
     const oauth2 = makeOAuthClient();
@@ -100,8 +94,8 @@ export const handler = async (event) => {
       return errorPage(
         "Google didn't return a refresh token. " +
         "This usually means you've previously authorized this app — go to " +
-        "<a href='https://myaccount.google.com/permissions'>your Google permissions</a>, " +
-        "remove this app's access, then try again. (We use prompt=consent so this shouldn't happen often.)",
+        "your Google permissions (myaccount.google.com/permissions), " +
+        "remove this app's access, then try again.",
       );
     }
 
@@ -113,39 +107,55 @@ export const handler = async (event) => {
     const email = profile.email || '';
     if (!email) return errorPage('Google returned no email on the profile.');
 
-    // Compute scopes actually granted
     const grantedScopes = (tokens.scope || '').split(' ').filter(Boolean);
+    const now = new Date().toISOString();
 
-    // Upsert into user_google_accounts (unique on user_id+email)
-    const { error: upErr } = await supabase
-      .from('user_google_accounts')
-      .upsert({
-        user_id:        userId,
-        email,
-        display_name:   profile.name        || '',
-        avatar_url:     profile.picture     || '',
-        refresh_token:  tokens.refresh_token,
-        access_token:   tokens.access_token || '',
-        access_expires: tokens.expiry_date  ? new Date(tokens.expiry_date).toISOString() : null,
-        scopes:         grantedScopes,
-        last_used_at:   new Date().toISOString(),
-      }, { onConflict: 'user_id,email' });
-    if (upErr) throw upErr;
+    // Upsert: find existing account for this user+email, update or create
+    const safeUserId = String(userId).replace(/'/g, "\\'");
+    const safeEmail  = String(email).replace(/'/g, "\\'");
+    const existing = await airtableList('Google Accounts', {
+      filterByFormula: `AND({${GOOGLE_ACCOUNTS_MAP.userId}} = '${safeUserId}', {${GOOGLE_ACCOUNTS_MAP.email}} = '${safeEmail}')`,
+      maxRecords: 1,
+    });
 
-    // If this is the user's first account, make it active automatically.
-    const { count } = await supabase
-      .from('user_google_accounts')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId);
-    if (count === 1) {
-      await supabase
-        .from('user_google_accounts')
-        .update({ is_active: true })
-        .eq('user_id', userId);
+    const accountFields = {
+      [GOOGLE_ACCOUNTS_MAP.userId]:        userId,
+      [GOOGLE_ACCOUNTS_MAP.email]:         email,
+      [GOOGLE_ACCOUNTS_MAP.displayName]:   profile.name    || '',
+      [GOOGLE_ACCOUNTS_MAP.avatarUrl]:     profile.picture || '',
+      [GOOGLE_ACCOUNTS_MAP.refreshToken]:  tokens.refresh_token,
+      [GOOGLE_ACCOUNTS_MAP.accessToken]:   tokens.access_token || '',
+      [GOOGLE_ACCOUNTS_MAP.accessExpires]: tokens.expiry_date
+        ? new Date(tokens.expiry_date).toISOString() : '',
+      [GOOGLE_ACCOUNTS_MAP.scopes]:        JSON.stringify(grantedScopes),
+      [GOOGLE_ACCOUNTS_MAP.lastUsedAt]:    now,
+    };
+
+    let accountRecordId;
+    if (existing[0]) {
+      await airtableUpdate('Google Accounts', existing[0].id, accountFields);
+      accountRecordId = existing[0].id;
+    } else {
+      const created = await airtableCreate('Google Accounts', {
+        ...accountFields,
+        [GOOGLE_ACCOUNTS_MAP.isActive]: false,
+      });
+      accountRecordId = created.id;
+    }
+
+    // If this is the user's first account, make it active automatically
+    const allAccounts = await airtableList('Google Accounts', {
+      filterByFormula: `{${GOOGLE_ACCOUNTS_MAP.userId}} = '${safeUserId}'`,
+      maxRecords: 2,
+    });
+    if (allAccounts.length === 1) {
+      await airtableUpdate('Google Accounts', accountRecordId, {
+        [GOOGLE_ACCOUNTS_MAP.isActive]: true,
+      });
     }
 
     // Delete the state token (one-time use)
-    await supabase.from('oauth_state').delete().eq('state', state);
+    await airtableDelete('OAuth State', stateRow.id);
 
     return successPage(email);
   } catch (e) {

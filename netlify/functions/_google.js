@@ -18,7 +18,7 @@
 //   PUBLIC_URL or URL — used to build the OAuth redirect URI
 
 import { google } from 'googleapis';
-import { getSupabase } from './_supabase.js';
+import { airtableList, airtableUpdate, GOOGLE_ACCOUNTS_MAP } from './_airtable.js';
 
 // The redirect URI registered in Google Cloud Console.
 // MUST match exactly what's listed in the OAuth client's "Authorized redirect URIs".
@@ -66,31 +66,48 @@ export function clientForTokens({ refresh_token, access_token, access_expires })
   return c;
 }
 
+// ── Helper: find active Google account record for a user ──────────────────
+async function findActiveAccountRecord(userId) {
+  const safe = String(userId).replace(/'/g, "\\'");
+  const records = await airtableList('Google Accounts', {
+    filterByFormula: `AND({${GOOGLE_ACCOUNTS_MAP.userId}} = '${safe}', {${GOOGLE_ACCOUNTS_MAP.isActive}} = TRUE())`,
+    maxRecords: 1,
+  });
+  return records[0] || null;
+}
+
 // ── Get the active Google account for a Clerk user ─────────────────────────
 // Returns { account, oauth2Client } or, if the user hasn't connected an
 // account, falls back to the env-based "system" account.
 export async function getActiveGoogleClient(userId) {
   if (userId) {
     try {
-      const supabase = getSupabase();
-      const { data, error } = await supabase
-        .from('user_google_accounts')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('is_active', true)
-        .single();
-      if (!error && data?.refresh_token) {
+      const record = await findActiveAccountRecord(userId);
+      if (record && record.fields[GOOGLE_ACCOUNTS_MAP.refreshToken]) {
+        const f = record.fields;
         // Update last_used_at (fire and forget)
-        supabase.from('user_google_accounts')
-          .update({ last_used_at: new Date().toISOString() })
-          .eq('id', data.id)
-          .then(() => {}, () => {});
+        airtableUpdate('Google Accounts', record.id, {
+          [GOOGLE_ACCOUNTS_MAP.lastUsedAt]: new Date().toISOString(),
+        }).catch(() => {});
+
+        const scopesRaw = f[GOOGLE_ACCOUNTS_MAP.scopes];
+        const scopes = scopesRaw
+          ? (Array.isArray(scopesRaw) ? scopesRaw : JSON.parse(scopesRaw))
+          : [];
+
         return {
           account: {
-            id: data.id, email: data.email, displayName: data.display_name,
-            avatarUrl: data.avatar_url, scopes: data.scopes,
+            id:          record.id,
+            email:       f[GOOGLE_ACCOUNTS_MAP.email]       || '',
+            displayName: f[GOOGLE_ACCOUNTS_MAP.displayName] || '',
+            avatarUrl:   f[GOOGLE_ACCOUNTS_MAP.avatarUrl]   || '',
+            scopes,
           },
-          oauth2Client: clientForTokens(data),
+          oauth2Client: clientForTokens({
+            refresh_token:  f[GOOGLE_ACCOUNTS_MAP.refreshToken],
+            access_token:   f[GOOGLE_ACCOUNTS_MAP.accessToken],
+            access_expires: f[GOOGLE_ACCOUNTS_MAP.accessExpires],
+          }),
           source: 'user-account',
         };
       }
@@ -120,13 +137,29 @@ export async function getActiveGoogleClient(userId) {
 
 // ── Convenience: list all connected accounts for a user ────────────────────
 export async function listUserGoogleAccounts(userId) {
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from('user_google_accounts')
-    .select('id, email, display_name, avatar_url, scopes, is_active, created_at, last_used_at')
-    .eq('user_id', userId)
-    .order('is_active', { ascending: false })
-    .order('last_used_at', { ascending: false, nullsFirst: false });
-  if (error) throw error;
-  return data || [];
+  const safe = String(userId).replace(/'/g, "\\'");
+  const records = await airtableList('Google Accounts', {
+    filterByFormula: `{${GOOGLE_ACCOUNTS_MAP.userId}} = '${safe}'`,
+    sort: [
+      { field: GOOGLE_ACCOUNTS_MAP.isActive,   direction: 'desc' },
+      { field: GOOGLE_ACCOUNTS_MAP.lastUsedAt, direction: 'desc' },
+    ],
+    maxRecords: 50,
+  });
+
+  return records.map(r => ({
+    id:          r.id,
+    email:       r.fields[GOOGLE_ACCOUNTS_MAP.email]       || '',
+    displayName: r.fields[GOOGLE_ACCOUNTS_MAP.displayName] || '',
+    avatarUrl:   r.fields[GOOGLE_ACCOUNTS_MAP.avatarUrl]   || '',
+    scopes:      (() => {
+      const s = r.fields[GOOGLE_ACCOUNTS_MAP.scopes];
+      if (!s) return [];
+      if (Array.isArray(s)) return s;
+      try { return JSON.parse(s); } catch { return []; }
+    })(),
+    isActive:    !!r.fields[GOOGLE_ACCOUNTS_MAP.isActive],
+    lastUsedAt:  r.fields[GOOGLE_ACCOUNTS_MAP.lastUsedAt] || null,
+    createdAt:   r.fields['Created Time'] || null,
+  }));
 }
