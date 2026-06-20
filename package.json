@@ -1,0 +1,18 @@
+{
+  "name": "ovm-contract-funnel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OneVibeMedia personalized website preview → add-ons → SignWell contract → Stripe deposit funnel.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "netlify:dev": "netlify dev"
+  },
+  "dependencies": {
+    "@vitejs/plugin-basic-ssl": "^1.2.0",
+    "vite": "^6.3.5"
+  },
+  "devDependencies": {}
+}

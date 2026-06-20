@@ -1,0 +1,32 @@
+{
+  "slug": "demo-medspa",
+  "businessName": "GlowLab Med Spa",
+  "industry": "Med Spa",
+  "domain": "glowlabmedspa.com",
+  "location": "Miami, FL",
+  "primaryColor": "#8f6bff",
+  "accentColor": "#16d1b0",
+  "logoText": "GlowLab",
+  "heroTitle": "A premium med spa website built to turn local traffic into booked consultations.",
+  "heroSubtitle": "A polished, conversion-first preview for injectables, facials, IV therapy, body treatments, and membership offers.",
+  "recommendedPackage": "brand-platform",
+  "suggestedAddOns": ["launch-content", "seo-foundation"],
+  "sections": [
+    {
+      "eyebrow": "Premium Positioning",
+      "title": "Make the online experience match the quality of the treatments.",
+      "body": "Most med spa websites look generic. This direction builds trust quickly with clear service pathways, before-and-after proof blocks, treatment education, and booking CTAs that keep visitors moving."
+    },
+    {
+      "eyebrow": "Conversion Funnel",
+      "title": "Turn the homepage into a booking path, not a brochure.",
+      "body": "The structure guides visitors from treatment interest to consultation. High-intent actions stay visible: book a consult, view treatment menus, explore specials, or message the team."
+    },
+    {
+      "eyebrow": "Growth Ready",
+      "title": "Built for SEO, ads, content, and monthly campaigns.",
+      "body": "The site can support local SEO pages, Meta ads, landing pages, seasonal offers, content bundles, and review-building campaigns once the foundation is live."
+    }
+  ],
+  "testimonial": "Your services are already premium. The website should make people feel that before they ever walk through the door."
+}

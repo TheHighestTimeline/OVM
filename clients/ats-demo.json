@@ -1,0 +1,32 @@
+{
+  "slug": "ats-demo",
+  "businessName": "ATS — A Total Solutions",
+  "industry": "Security & Fire Protection",
+  "domain": "atotalsolutions.com",
+  "location": "South Florida",
+  "primaryColor": "#144D83",
+  "accentColor": "#ffb020",
+  "logoText": "ATS",
+  "heroTitle": "A local lead funnel for security cameras, access control, and fire protection installs.",
+  "heroSubtitle": "This preview replaces a passive Contact Us page with clear packages, instant next steps, and a local SEO/ad engine.",
+  "recommendedPackage": "growth-site",
+  "suggestedAddOns": ["conversion-funnel", "seo-foundation", "facebook-ad-management"],
+  "sections": [
+    {
+      "eyebrow": "Funnel First",
+      "title": "Stop sending paid traffic to a dead-end contact page.",
+      "body": "The upgraded page can show 3, 5, and 7 camera packages, instant price ranges, FAQs, trust signals, and a request-a-quote path that turns visitors into qualified leads."
+    },
+    {
+      "eyebrow": "Local SEO",
+      "title": "Rank for the exact searches buyers are already making.",
+      "body": "Security camera installer near me, access control installation, commercial fire protection, and local service keywords can be organized into a stronger search structure."
+    },
+    {
+      "eyebrow": "Ad Ready",
+      "title": "Launch Facebook campaigns only after the funnel can convert.",
+      "body": "Once the funnel is live, ad spend has somewhere useful to go. Campaigns can be tracked by offer, package, lead source, and cost per qualified inquiry."
+    }
+  ],
+  "testimonial": "We do not just run ads. We build the system that makes ads work."
+}
