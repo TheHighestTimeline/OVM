@@ -3,10 +3,36 @@ import "./styles.css";
 
 const app = document.querySelector("#app");
 
+const PORTFOLIO_EXAMPLES = [
+  {
+    name: "Dockbridge",
+    url: "https://dockbridge.io",
+    domain: "dockbridge.io",
+    descriptor: "Clean, premium SaaS / infrastructure-style website direction.",
+    accent: "#144D83"
+  },
+  {
+    name: "InitPic",
+    url: "https://initpic.com",
+    domain: "initpic.com",
+    descriptor: "Modern product-forward site with simple conversion flow.",
+    accent: "#111827"
+  },
+  {
+    name: "LilyCRM",
+    url: "https://lilycrm.com",
+    domain: "lilycrm.com",
+    descriptor: "Software brand experience with a polished CRM-style interface.",
+    accent: "#7447ff"
+  }
+];
+
 function route() {
   const path = window.location.pathname;
   if (path.startsWith("/preview/")) return renderPreview(path.split("/").pop());
-  if (path.startsWith("/addons/")) return renderAddons(path.split("/").pop());
+  if (path === "/order") return renderOrder("demo-medspa");
+  if (path.startsWith("/order/")) return renderOrder(path.split("/").pop());
+  if (path.startsWith("/addons/")) return renderOrder(path.split("/").pop());
   if (path.startsWith("/contract/")) return renderContract(path.split("/").pop());
   if (path.startsWith("/payment/")) return renderPayment(path.split("/").pop());
   if (path.startsWith("/success")) return renderSuccess();
@@ -33,18 +59,54 @@ async function loadClient(slug) {
 
 function renderHome() {
   app.innerHTML = `
-    <main class="home">
-      <div class="home-card">
-        <div class="brand-pill">OneVibeMedia Contract Funnel</div>
-        <h1>Website preview → add-ons → contract → deposit.</h1>
-        <p>This starter is running. Open a demo preview below.</p>
-        <div class="home-actions">
-          <a href="/preview/demo-medspa" data-link class="btn primary">Open Med Spa Demo</a>
-          <a href="/preview/ats-demo" data-link class="btn ghost">Open ATS Demo</a>
+    <main class="portfolio-home">
+      <section class="portfolio-stage">
+        <div class="portfolio-copy">
+          <div class="brand-pill">OneVibeMedia Website Funnel</div>
+          <h1>Can I see examples?</h1>
+          <p>Swipe through actual website examples from our design portfolio. Then continue into the order details and agreement flow.</p>
         </div>
-      </div>
+
+        <div class="portfolio-carousel" aria-label="Website example carousel">
+          ${PORTFOLIO_EXAMPLES.map((site, index) => `
+            <article class="portfolio-slide" style="--example-accent:${site.accent}">
+              <div class="browser-frame">
+                <div class="browser-top">
+                  <div class="browser-dots"><i></i><i></i><i></i></div>
+                  <div class="browser-url">${escapeHtml(site.domain)}</div>
+                </div>
+                <div class="browser-preview">
+                  <iframe src="${escapeAttr(site.url)}" title="${escapeAttr(site.name)} website preview" loading="lazy" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+                  <div class="iframe-fallback">
+                    <strong>${escapeHtml(site.name)}</strong>
+                    <span>Live site preview</span>
+                  </div>
+                </div>
+              </div>
+              <div class="portfolio-meta">
+                <span>Example ${index + 1}</span>
+                <h2>${escapeHtml(site.name)}</h2>
+                <p>${escapeHtml(site.descriptor)}</p>
+                <a href="${escapeAttr(site.url)}" target="_blank" rel="noreferrer" class="btn ghost">Open Live Site</a>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+
+        <div class="portfolio-hint">
+          <span>iPad-friendly swipe preview</span>
+          <span>Next step: order details</span>
+        </div>
+
+        <div class="swipe-wrap home-swipe" id="swipeWrap">
+          <div class="swipe-track" id="swipeTrack">
+            <div class="swipe-knob" id="swipeKnob">→</div>
+            <span>Slide to continue to order details</span>
+          </div>
+        </div>
+      </section>
     </main>`;
-  wireLinks();
+  setupSwipe(() => go("/order"));
 }
 
 function wireLinks() {
@@ -119,12 +181,14 @@ async function renderPreview(slug) {
 
   document.querySelector("#jumpWork").onclick = () => document.querySelector("#work").scrollIntoView({ behavior: "smooth" });
   document.querySelector("#jumpSwipe").onclick = () => document.querySelector("#swipeWrap").scrollIntoView({ behavior: "smooth", block: "center" });
-  setupSwipe(() => go(`/addons/${client.slug || slug}`));
+  setupSwipe(() => go(`/order/${client.slug || slug}`));
 }
 
 function setupSwipe(onComplete) {
   const track = document.querySelector("#swipeTrack");
   const knob = document.querySelector("#swipeKnob");
+  if (!track || !knob) return;
+
   let dragging = false;
   let startX = 0;
   let current = 0;
@@ -133,7 +197,7 @@ function setupSwipe(onComplete) {
   function setX(x) {
     current = Math.max(0, Math.min(x, max()));
     knob.style.transform = `translateX(${current}px)`;
-    track.style.setProperty("--progress", `${current / max()}`);
+    track.style.setProperty("--progress", `${current / Math.max(max(), 1)}`);
   }
 
   function done() {
@@ -165,28 +229,62 @@ function setupSwipe(onComplete) {
   });
 }
 
-async function renderAddons(slug) {
+async function renderOrder(slug) {
   const client = await loadClient(slug);
   const initialBase = client.recommendedPackage || "starter-site";
   const initialAddons = new Set(client.suggestedAddOns || []);
 
   app.innerHTML = `
-    <main class="checkout-shell">
+    <main class="checkout-shell order-shell">
       <section class="checkout-head">
-        <div class="brand-pill">Project Setup</div>
-        <h1>Choose what you want included.</h1>
-        <p>We’ll generate the agreement and deposit amount from the package and add-ons selected here.</p>
+        <div class="brand-pill">Order Details</div>
+        <h1>Tell us what you want built.</h1>
+        <p>Pick the package, add-ons, timeline, and notes. Then we’ll generate the SignWell agreement from the details below.</p>
       </section>
 
       <section class="checkout-grid">
         <form id="dealForm" class="panel form-panel">
           <h2>Client Details</h2>
           <div class="field-grid">
-            <label>Client Name <input name="clientName" required placeholder="Full name" /></label>
-            <label>Business Name <input name="businessName" required value="${escapeAttr(client.businessName || "")}" /></label>
+            <label>Full Name <input name="clientName" required placeholder="Full name" /></label>
             <label>Email <input name="email" required type="email" placeholder="client@email.com" /></label>
+            <label>Business / Artist / Brand Name <input name="businessName" required value="${escapeAttr(client.businessName || "")}" /></label>
             <label>Phone <input name="phone" placeholder="(555) 555-5555" /></label>
           </div>
+
+          <h2>Project Details</h2>
+          <div class="field-grid">
+            <label>Project Type
+              <select name="projectType" required>
+                <option value="Custom Website">Custom Website</option>
+                <option value="Website + Custom Visuals">Website + Custom Visuals</option>
+                <option value="Website + PDF / EPK">Website + PDF / EPK</option>
+                <option value="Website + Funnel / CRM">Website + Funnel / CRM</option>
+                <option value="Full Launch Package">Full Launch Package</option>
+              </select>
+            </label>
+            <label>Desired Timeline
+              <select name="timeline" required>
+                <option value="ASAP">ASAP</option>
+                <option value="1-2 Weeks">1-2 Weeks</option>
+                <option value="2-4 Weeks">2-4 Weeks</option>
+                <option value="30+ Days">30+ Days</option>
+              </select>
+            </label>
+            <label>Budget Range
+              <select name="budgetRange" required>
+                <option value="$1,000 - $2,500">$1,000 - $2,500</option>
+                <option value="$2,500 - $5,000">$2,500 - $5,000</option>
+                <option value="$5,000 - $10,000">$5,000 - $10,000</option>
+                <option value="$10,000+">$10,000+</option>
+              </select>
+            </label>
+            <label>Inspiration / Existing Links <input name="inspirationLinks" placeholder="Website, Instagram, Linktree, examples, etc." /></label>
+          </div>
+
+          <label class="full-field">Notes / Special Requests
+            <textarea name="notes" rows="4" placeholder="Tell us what pages, visuals, offers, forms, integrations, or anything else you want included."></textarea>
+          </label>
 
           <h2>Base Package</h2>
           <div class="cards">
@@ -218,13 +316,20 @@ async function renderAddons(slug) {
             <label><input type="radio" name="paymentMethod" value="bank_transfer" /> Bank transfer details on screen</label>
           </div>
 
-          <button class="btn primary wide" type="submit">Generate Agreement</button>
-          <p class="fine-print">Final totals are recalculated server-side before the agreement and deposit link are created.</p>
+          <button class="btn primary wide" type="submit">Continue to Agreement</button>
+          <p class="fine-print">Final totals are recalculated server-side before the SignWell agreement and deposit link are created.</p>
         </form>
 
         <aside class="panel summary-panel">
           <h2>Project Summary</h2>
           <div id="summary"></div>
+          <div class="mini-flow">
+            <strong>Next Steps</strong>
+            <span>1. Submit order details</span>
+            <span>2. Sign agreement in SignWell</span>
+            <span>3. Pay 25% deposit</span>
+            <span>4. Complete onboarding form by email</span>
+          </div>
         </aside>
       </section>
     </main>
@@ -257,12 +362,17 @@ async function renderAddons(slug) {
       businessName: fd.get("businessName"),
       email: fd.get("email"),
       phone: fd.get("phone"),
+      projectType: fd.get("projectType"),
+      timeline: fd.get("timeline"),
+      budgetRange: fd.get("budgetRange"),
+      inspirationLinks: fd.get("inspirationLinks"),
+      notes: fd.get("notes"),
       basePackage: fd.get("basePackage"),
       addOns: fd.getAll("addOns"),
       paymentMethod: fd.get("paymentMethod")
     };
 
-    setLoading(true, "Generating agreement...");
+    setLoading(true, "Creating SignWell agreement...");
     try {
       const res = await fetch("/.netlify/functions/submit-deal", {
         method: "POST",
@@ -287,7 +397,7 @@ function renderContract(dealId) {
   app.innerHTML = `
     <main class="contract-shell">
       <section class="panel contract-panel">
-        <div class="brand-pill">Agreement</div>
+        <div class="brand-pill">SignWell Agreement</div>
         <h1>Review and sign your project agreement.</h1>
         <p>Deal ID: <strong>${escapeHtml(dealId)}</strong></p>
 
@@ -298,6 +408,7 @@ function renderContract(dealId) {
           <div class="mock-contract">
             <h2>Mock Agreement Preview</h2>
             <p>This is mock mode. Once SignWell keys are connected, this area will show the SignWell embedded signing link or send the client to the live signing experience.</p>
+            <div class="summary-row"><span>Project Type</span><strong>${escapeHtml(deal?.projectType || "Custom Website")}</strong></div>
             <div class="summary-row"><span>Project Total</span><strong>${money(deal?.totals?.projectTotal || 0)}</strong></div>
             <div class="summary-row"><span>Due at Signing</span><strong>${money(deal?.totals?.dueAtSigning || 0)}</strong></div>
             <label class="mock-checkbox"><input type="checkbox" id="mockSigned" /> I have reviewed and signed the mock agreement.</label>
@@ -388,7 +499,7 @@ function renderSuccess() {
         <div class="brand-pill">Success</div>
         <h1>Deposit step complete.</h1>
         <p>Your onboarding form will be emailed so it can be completed at your own pace.</p>
-        <a href="/preview/demo-medspa" data-link class="btn ghost">Back to Demo</a>
+        <a href="/" data-link class="btn ghost">Back to Examples</a>
       </section>
     </main>
   `;

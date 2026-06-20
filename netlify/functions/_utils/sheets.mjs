@@ -85,7 +85,13 @@ export async function appendDealRow(deal) {
     deal.stripeSessionId || "",
     deal.stripePaymentStatus || "",
     deal.onboardingUrl || "",
-    deal.notes || ""
+    [
+      deal.projectType ? `Project Type: ${deal.projectType}` : "",
+      deal.timeline ? `Timeline: ${deal.timeline}` : "",
+      deal.budgetRange ? `Budget Range: ${deal.budgetRange}` : "",
+      deal.inspirationLinks ? `Inspiration: ${deal.inspirationLinks}` : "",
+      deal.notes ? `Notes: ${deal.notes}` : ""
+    ].filter(Boolean).join(" | ")
   ]];
 
   const range = encodeURIComponent(`${tab}!A:T`);

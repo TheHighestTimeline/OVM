@@ -9,6 +9,7 @@ export function buildOnboardingUrl(deal) {
   url.searchParams.set("client_name", deal.clientName);
   url.searchParams.set("business_name", deal.businessName);
   url.searchParams.set("package", deal.totals.basePackageName);
+  url.searchParams.set("project_type", deal.projectType || "Custom Website");
   url.searchParams.set("project_total", String(deal.totals.projectTotal));
   return url.toString();
 }
@@ -50,6 +51,11 @@ export async function createSignWellDocument(deal) {
       { api_id: "business_name", value: deal.businessName },
       { api_id: "client_email", value: deal.email },
       { api_id: "client_phone", value: deal.phone || "" },
+      { api_id: "project_type", value: deal.projectType || "Custom Website" },
+      { api_id: "project_timeline", value: deal.timeline || "" },
+      { api_id: "budget_range", value: deal.budgetRange || "" },
+      { api_id: "inspiration_links", value: deal.inspirationLinks || "" },
+      { api_id: "project_notes", value: deal.notes || "" },
       { api_id: "selected_package", value: deal.totals.basePackageName },
       { api_id: "selected_add_ons", value: deal.totals.addOnNames.join(", ") || "None" },
       { api_id: "project_total", value: formatMoney(deal.totals.projectTotal) },

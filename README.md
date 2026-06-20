@@ -2,15 +2,19 @@
 
 A Netlify-ready funnel for OneVibeMedia:
 
-**custom website preview → swipe CTA → add-ons → dynamic SignWell agreement → Stripe 25% deposit or bank-transfer instructions → onboarding email with Tally link → Google Sheets tracking**
+**real website examples → iPad swipe CTA → order details form → dynamic SignWell agreement → Stripe 25% deposit or bank-transfer instructions → onboarding email with Tally link → Google Sheets tracking**
 
 This repo is built to run in `MOCK_MODE=true` immediately so you can push it to GitHub, connect it to Netlify, and see the funnel before adding live API keys.
 
 ## What this includes
 
-- A scrollable personalized website preview per client.
-- A fixed swipe button visible in the viewport.
-- A base package + add-on selector.
+- A portfolio-first homepage that opens with real website examples.
+- Example links/cards for:
+  - `dockbridge.io`
+  - `initpic.com`
+  - `lilycrm.com`
+- A fixed iPad-friendly swipe button at the bottom of the viewport.
+- An order details form for name, email, business/artist/brand, project type, package, add-ons, timeline, budget range, notes, and inspiration links.
 - Server-side pricing calculation in Netlify Functions.
 - SignWell document generation from a template.
 - Stripe Checkout Session generation for the exact deposit amount.
@@ -18,6 +22,23 @@ This repo is built to run in `MOCK_MODE=true` immediately so you can push it to 
 - Google Sheets append/update helpers for deal tracking.
 - Onboarding email helper using Resend.
 - Mock contract/payment mode for testing without keys.
+
+## Funnel flow
+
+```text
+/              Website examples first
+/order         Order details form
+/contract/:id  SignWell agreement / mock agreement
+/payment/:id   Deposit payment or bank transfer
+/success       Confirmation
+```
+
+Legacy personalized preview URLs still work:
+
+```text
+/preview/demo-medspa
+/preview/ats-demo
+```
 
 ## Local setup
 
@@ -29,8 +50,8 @@ npm run dev
 Open:
 
 ```text
-http://localhost:5173/preview/demo-medspa
-http://localhost:5173/preview/ats-demo
+http://localhost:5173/
+http://localhost:5173/order
 ```
 
 For Netlify Functions locally, install the Netlify CLI and run:
@@ -42,13 +63,12 @@ npm run netlify:dev
 
 ## Deploy to Netlify
 
-1. Create a new GitHub repo.
-2. Upload this folder.
-3. Connect the repo to Netlify.
-4. Build command: `npm run build`
-5. Publish directory: `dist`
-6. Functions directory: `netlify/functions`
-7. Add environment variables from `.env.example`.
+1. Push this folder to the `ovm-contract-funnel` branch.
+2. Connect the repo/branch to Netlify.
+3. Build command: `npm run build`
+4. Publish directory: `dist`
+5. Functions directory: `netlify/functions`
+6. Add environment variables from `.env.example`.
 
 The app runs in mock mode until you set:
 
@@ -62,27 +82,17 @@ GOOGLE_SERVICE_ACCOUNT_EMAIL=...
 GOOGLE_PRIVATE_KEY=...
 ```
 
-## Client folders
+## Website example notes
 
-Create a new client by copying:
+The homepage uses live website preview frames for the portfolio examples. Some websites may block iframe embedding depending on their security headers. If that happens, the user can still tap **Open Live Site** to view the example in a new tab.
 
-```text
-clients/demo-medspa.json
-```
-
-Example:
+For a fully controlled production version, replace the live iframes with screenshots stored in the repo, such as:
 
 ```text
-clients/miami-medspa.json
+/public/examples/dockbridge.png
+/public/examples/initpic.png
+/public/examples/lilycrm.png
 ```
-
-Then send the client:
-
-```text
-https://your-site.netlify.app/preview/miami-medspa
-```
-
-The frontend loads the JSON file and renders the custom preview. The backend still calculates prices from the protected server-side pricing file.
 
 ## Recommended Google Sheet columns
 
@@ -91,6 +101,8 @@ Create a sheet tab called `Deals` with this header row:
 ```csv
 deal_id,created_at,status,client_slug,client_name,business_name,email,phone,selected_package,add_ons,project_total,deposit_due,remaining_due,monthly_total,payment_method,signwell_document_id,stripe_session_id,stripe_payment_status,onboarding_url,notes
 ```
+
+The `notes` column now receives the project type, timeline, budget range, inspiration links, and special requests combined into one readable field.
 
 Share the sheet with your Google service account email.
 
@@ -104,6 +116,11 @@ client_name
 business_name
 client_email
 client_phone
+project_type
+project_timeline
+budget_range
+inspiration_links
+project_notes
 selected_package
 selected_add_ons
 project_total
@@ -176,6 +193,7 @@ The Tally link can receive hidden fields:
 &client_name=...
 &business_name=...
 &package=...
+&project_type=...
 &project_total=...
 ```
 
